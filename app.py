@@ -54,12 +54,15 @@ load_dotenv()
 ASSET_UNIVERSE: dict[str, list[str]] = {
     "MAG7 & Tech Giants": [
         "NVDA",   # NVIDIA — AI / GPU
+        "TSM",    # TSMC — world's largest chipmaker
         "AAPL",   # Apple
         "MSFT",   # Microsoft
         "GOOGL",  # Alphabet
         "AMZN",   # Amazon
         "META",   # Meta
         "TSLA",   # Tesla
+        "AVGO",   # Broadcom
+        "ORCL",   # Oracle
     ],
     "Broad Market (ตลาดหลัก)": [
         "^SPX",   # S&P 500 Index  (^GSPC is the yfinance fallback if ^SPX is empty)
@@ -69,28 +72,53 @@ ASSET_UNIVERSE: dict[str, list[str]] = {
         "VT",     # Vanguard Total World ETF
         "BRK-B",  # Berkshire Hathaway Class B
     ],
-    "Growth & Tech (เติบโต)": [
-        "QQQ",    # Invesco NASDAQ-100 ETF
-        "QQQM",   # Invesco NASDAQ-100 ETF (cheaper share price)
-        "XLK",    # Technology Select Sector SPDR ETF
-        "AVGO",   # Broadcom
-        "PANW",   # Palo Alto Networks
-        "MU",     # Micron Technology
-        "ISRG",   # Intuitive Surgical
-    ],
-    "Dividend & Value (ปันผล/คุณค่า)": [
-        "SCHD",   # Schwab US Dividend Equity ETF
-        "VIG",    # Vanguard Dividend Appreciation ETF
-        "WM",     # Waste Management
-        "JNJ",    # Johnson & Johnson
+    "Buffett Portfolio (ปู่บัฟเฟตต์)": [
+        "BRK-B",  # Berkshire Hathaway — the vehicle
+        "KO",     # Coca-Cola
+        "BAC",    # Bank of America
+        "AXP",    # American Express
+        "CVX",    # Chevron
+        "KHC",    # Kraft Heinz
         "MCO",    # Moody's Corp
         "V",      # Visa Inc
+        "MA",     # Mastercard
+        "DVA",    # DaVita
+        "COF",    # Capital One
+        "HWM",    # Howmet Aerospace
+        "PARA",   # Paramount Global
     ],
-    "Healthcare & Utilities (สุขภาพ/สาธารณูปโภค)": [
-        "LLY",    # Eli Lilly
-        "AWK",    # American Water Works
+    "Oil & Energy (พลังงาน)": [
+        "CVX",    # Chevron
+        "XOM",    # Exxon Mobil
+        "SHEL",   # Shell
+        "COP",    # ConocoPhillips
+        "BP",     # BP
+        "TTE",    # TotalEnergies
+        "EOG",    # EOG Resources
+        "PBR",    # Petrobras
+        "SLB",    # SLB (Schlumberger)
+        "HAL",    # Halliburton
     ],
-    "Speculative & Others (เก็งกำไร/อื่นๆ)": [
+    "Growth & Sector ETFs": [
+        "QQQ",    # Invesco NASDAQ-100 ETF
+        "QQQM",   # Invesco NASDAQ-100 ETF (lower share price)
+        "XLK",    # Technology Select Sector SPDR ETF
+        "XLV",    # Health Care Select Sector SPDR ETF
+        "XLE",    # Energy Select Sector SPDR ETF
+        "XLF",    # Financial Select Sector SPDR ETF
+        "SCHD",   # Schwab US Dividend Equity ETF
+        "VIG",    # Vanguard Dividend Appreciation ETF
+    ],
+    "Healthcare, Utilities & Others": [
+        "LLY",      # Eli Lilly
+        "JNJ",      # Johnson & Johnson
+        "PFE",      # Pfizer
+        "ABBV",     # AbbVie
+        "AWK",      # American Water Works
+        "WM",       # Waste Management
+        "ISRG",     # Intuitive Surgical
+        "PANW",     # Palo Alto Networks
+        "MU",       # Micron Technology
         "TMC",      # The Metals Company
         "BTC-USD",  # Bitcoin — -USD suffix mandatory; bare "BTC" = wrong ticker
     ],
@@ -105,7 +133,7 @@ CLASS_META: dict[str, dict] = {
         "label":       "MAG7 & Tech Giants",
         "icon":        "🏆",
         "accent":      "#FFD700",
-        "description": "หุ้นเทคโนโลยีชั้นนำ · Magnificent Seven · AI Leaders",
+        "description": "หุ้นเทคโนโลยีชั้นนำ · Magnificent Seven · TSMC · AI Leaders",
     },
     "Broad Market (ตลาดหลัก)": {
         "label":       "Broad Market",
@@ -113,35 +141,38 @@ CLASS_META: dict[str, dict] = {
         "accent":      "#38bdf8",
         "description": "ตลาดหุ้นหลัก · S&P 500 · ETF ครอบคลุมตลาด",
     },
-    "Growth & Tech (เติบโต)": {
-        "label":       "Growth & Tech",
+    "Buffett Portfolio (ปู่บัฟเฟตต์)": {
+        "label":       "Buffett Portfolio",
+        "icon":        "🎩",
+        "accent":      "#4ade80",
+        "description": "พอร์ต Berkshire Hathaway · หุ้นคุณค่าระยะยาว · Warren Buffett",
+    },
+    "Oil & Energy (พลังงาน)": {
+        "label":       "Oil & Energy",
+        "icon":        "🛢️",
+        "accent":      "#fb923c",
+        "description": "หุ้นพลังงานและน้ำมัน · Major Oils · E&P · Services",
+    },
+    "Growth & Sector ETFs": {
+        "label":       "Growth & Sector ETFs",
         "icon":        "🚀",
         "accent":      "#a78bfa",
-        "description": "หุ้นเทคโนโลยีและการเติบโต · NASDAQ · Semi · AI",
+        "description": "ETF กลุ่มอุตสาหกรรม · NASDAQ · Tech · Health · Energy · Finance",
     },
-    "Dividend & Value (ปันผล/คุณค่า)": {
-        "label":       "Dividend & Value",
-        "icon":        "💰",
-        "accent":      "#4ade80",
-        "description": "หุ้นปันผลและมูลค่า · ETF รายได้ · หุ้น Blue-Chip",
-    },
-    "Healthcare & Utilities (สุขภาพ/สาธารณูปโภค)": {
-        "label":       "Healthcare & Utilities",
+    "Healthcare, Utilities & Others": {
+        "label":       "Healthcare & Others",
         "icon":        "🏥",
         "accent":      "#f472b6",
-        "description": "การแพทย์และสาธารณูปโภค · Defensive stocks",
-    },
-    "Speculative & Others (เก็งกำไร/อื่นๆ)": {
-        "label":       "Speculative & Others",
-        "icon":        "⚡",
-        "accent":      "#fb923c",
-        "description": "หุ้นเก็งกำไรและ Crypto · ความเสี่ยงสูง",
+        "description": "การแพทย์ · สาธารณูปโภค · Tech · Crypto · Speculative",
     },
 }
 
 # ── Friendly display names used in tab labels, screener, and chips ───────────
 # Any ticker not in this dict falls back to the raw symbol (equities work fine).
 _TICKER_LABELS: dict[str, str] = {
+    # ── MAG7 & Tech Giants ───────────────────────────────────────────────────
+    "TSM":   "TSMC",
+    # (NVDA, AAPL, MSFT, GOOGL, AMZN, META, TSLA, AVGO, ORCL fall back to raw symbol)
     # ── Indices & broad-market ETFs ──────────────────────────────────────────
     "^SPX":  "S&P 500 Index",
     "VOO":   "Vanguard S&P 500",
@@ -149,33 +180,56 @@ _TICKER_LABELS: dict[str, str] = {
     "VTI":   "Total US Market",
     "VT":    "Vanguard Total World",
     "BRK-B": "Berkshire Hathaway",
-    # ── Growth & Tech ETFs / stocks ──────────────────────────────────────────
+    # ── Buffett Portfolio ─────────────────────────────────────────────────────
+    "KO":    "Coca-Cola",
+    "BAC":   "Bank of America",
+    "AXP":   "American Express",
+    "CVX":   "Chevron",
+    "KHC":   "Kraft Heinz",
+    "MCO":   "Moody's Corp",
+    "V":     "Visa Inc",
+    "MA":    "Mastercard",
+    "DVA":   "DaVita",
+    "COF":   "Capital One",
+    "HWM":   "Howmet Aerospace",
+    "PARA":  "Paramount Global",
+    # ── Oil & Energy ──────────────────────────────────────────────────────────
+    "XOM":   "Exxon Mobil",
+    "SHEL":  "Shell",
+    "COP":   "ConocoPhillips",
+    "BP":    "BP",
+    "TTE":   "TotalEnergies",
+    "EOG":   "EOG Resources",
+    "PBR":   "Petrobras",
+    "SLB":   "SLB (Schlumberger)",
+    "HAL":   "Halliburton",
+    # ── Growth & Sector ETFs ─────────────────────────────────────────────────
     "QQQ":   "NASDAQ-100 ETF",
     "QQQM":  "NASDAQ-100 (QQQM)",
     "XLK":   "Tech Sector ETF",
-    "PANW":  "Palo Alto Networks",
-    "MU":    "Micron Technology",
-    "ISRG":  "Intuitive Surgical",
-    # ── Dividend & Value ─────────────────────────────────────────────────────
+    "XLV":   "Health Care ETF",
+    "XLE":   "Energy Sector ETF",
+    "XLF":   "Financial Sector ETF",
     "SCHD":  "Schwab Dividend",
     "VIG":   "Dividend Growth ETF",
-    "WM":    "Waste Management",
-    "JNJ":   "Johnson & Johnson",
-    "MCO":   "Moody's Corp",
-    "V":     "Visa Inc",
-    # ── Healthcare & Utilities ───────────────────────────────────────────────
+    # ── Healthcare, Utilities & Others ───────────────────────────────────────
     "LLY":   "Eli Lilly",
+    "JNJ":   "Johnson & Johnson",
+    "PFE":   "Pfizer",
+    "ABBV":  "AbbVie",
     "AWK":   "American Water Works",
-    # ── Speculative ──────────────────────────────────────────────────────────
-    "TMC":      "The Metals Company",
-    "BTC-USD":  "Bitcoin",
-    # ── Legacy crypto (kept for backwards-compat if user re-adds them) ───────
+    "WM":    "Waste Management",
+    "ISRG":  "Intuitive Surgical",
+    "PANW":  "Palo Alto Networks",
+    "MU":    "Micron Technology",
+    "TMC":   "The Metals Company",
+    "BTC-USD": "Bitcoin",
+    # ── Legacy (kept for backwards-compat) ───────────────────────────────────
     "ETH-USD":  "Ethereum",
     "SOL-USD":  "Solana",
     "BNB-USD":  "BNB",
     "XRP-USD":  "XRP",
     "DOGE-USD": "Dogecoin",
-    # ── Legacy commodities ────────────────────────────────────────────────────
     "GC=F":  "Gold",
     "SI=F":  "Silver",
     "CL=F":  "Crude Oil",
@@ -331,7 +385,24 @@ button[kind="header"] svg {
     text-transform: uppercase !important;
 }
 
-/* ── 4. Buttons — guard toggle from inheriting the app button styles ─────── */
+/* ── 4a. Responsive base font — larger across the board ─────────────────── */
+/* 1.2rem base would break tabs and small labels; use a modest lift instead. */
+/* clamp(min, preferred-vw, max) scales smoothly without overflow.           */
+html, body, [class*="css"] {
+    font-size: clamp(0.92rem, 1.8vw, 1.05rem) !important;
+}
+/* Sidebar nav — slightly larger than body text */
+[data-testid="stSidebarNav"],
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span {
+    font-size: clamp(0.9rem, 2vw, 1.1rem) !important;
+}
+/* Data table cells */
+.stDataFrame div {
+    font-size: clamp(0.8rem, 1.5vw, 0.95rem) !important;
+}
+
+/* ── 4b. Buttons — guard toggle from inheriting the app button styles ────── */
 /* Without :not([kind="header"]) the toggle gets width:100% and the gradient, */
 /* which makes it appear as a wide gold bar and breaks the circular shape.    */
 .stButton > button:not([kind="header"]) {
@@ -340,7 +411,7 @@ button[kind="header"] svg {
     border: none !important;
     border-radius: 8px !important;
     font-weight: 800 !important;
-    font-size: clamp(0.72rem, 2vw, 0.88rem) !important;
+    font-size: clamp(0.78rem, 2vw, 0.95rem) !important;
     padding: 0.6rem 1.2rem !important;
     transition: opacity 0.15s;
     width: 100%;
@@ -358,19 +429,21 @@ button[kind="header"] svg {
 }
 [data-testid="stMetricValue"] {
     color: var(--gold) !important;
-    /* clamp: 1.1rem on phone → 1.7rem on desktop */
-    font-size: clamp(1.1rem, 3.5vw, 1.7rem) !important;
-    font-weight: 700 !important;
+    /* Larger than before but clamped: won't overflow a 4-column grid cell.   */
+    /* On iPad mini (768px / 4 cols ≈ 192px per col) 2rem ≈ 32px — fits well. */
+    /* On desktop 2.4rem ≈ 38px — clear and prominent without overflowing.    */
+    font-size: clamp(1.4rem, 4vw, 2.4rem) !important;
+    font-weight: 800 !important;
     white-space: nowrap;
 }
 [data-testid="stMetricLabel"] {
     color: var(--lo) !important;
-    font-size: clamp(0.58rem, 1.5vw, 0.72rem) !important;
-    letter-spacing: 0.08em !important;
+    font-size: clamp(0.72rem, 1.8vw, 1.0rem) !important;
+    letter-spacing: 0.06em !important;
     text-transform: uppercase !important;
 }
 [data-testid="stMetricDelta"] {
-    font-size: clamp(0.62rem, 1.5vw, 0.78rem) !important;
+    font-size: clamp(0.72rem, 1.6vw, 0.9rem) !important;
 }
 
 /* ── 6. Tabs ─────────────────────────────────────────────────────────────── */
