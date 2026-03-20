@@ -37,27 +37,50 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────
-# Custom CSS
+# Custom CSS - Optimized for Visibility
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
+    /* Main Background */
     html, body, [data-testid="stAppViewContainer"] {
         background-color: #0d0f14 !important;
-        color: #e2e8f0;
+        color: #ffffff !important;
     }
+    
+    /* Table Styling for High Contrast */
+    .stTable {
+        background-color: #161a23 !important;
+        border-radius: 10px !important;
+        overflow: hidden !important;
+        border: 1px solid #2d3748 !important;
+    }
+    
+    /* Table Text and Cell Borders */
+    [data-testid="stTable"] td, [data-testid="stTable"] th {
+        color: #f1f5f9 !important;
+        border-bottom: 1px solid #1e2538 !important;
+        padding: 12px !important;
+    }
+    
+    /* Section Headers */
     .section-header {
-        font-size: 1rem;
+        font-size: 1.2rem;
         font-weight: 700;
         color: #a78bfa;
-        margin-top: 20px;
-        border-bottom: 1px solid #1e2538;
+        margin-top: 25px;
+        margin-bottom: 15px;
+        padding-bottom: 5px;
+        border-bottom: 2px solid #3e3e5e;
     }
+
+    /* Astro Insight Cards */
     .astro-card {
-        background: #161a23;
-        border: 1px solid #1e2538;
-        border-radius: 10px;
+        background: #1c212c;
+        border-left: 4px solid #fbbf24;
+        border-radius: 6px;
         padding: 15px;
         margin: 10px 0;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
 </style>
 """, unsafe_allow_html=True)
