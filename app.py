@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from dotenv import load_dotenv
 
+# Core Module Imports
 from core.astro_logic import DailyAstroReport, generate_daily_report
 from core.screener import (
     EntrySignal,
@@ -21,12 +22,12 @@ from utils.fetcher import (
 # Configuration
 ASSET_UNIVERSE = {
     "MAG7": MAG7,
-    "CRYPTO": ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD"],
-    "COMMODITIES": ["GC=F", "SI=F", "CL=F"]
+    "CRYPTO": ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD"],
+    "COMMODITIES": ["GC=F", "SI=F", "CL=F", "HG=F"]
 }
 
 def display_name(t: str) -> str:
-    names = {"GC=F": "Gold", "SI=F": "Silver", "CL=F": "Crude Oil"}
+    names = {"GC=F": "Gold", "SI=F": "Silver", "CL=F": "Crude Oil", "HG=F": "Copper"}
     return names.get(t, t)
 
 def fetch_asset_class_data(asset_class: str):
@@ -40,151 +41,143 @@ def fetch_asset_class_data(asset_class: str):
 load_dotenv()
 
 # ─────────────────────────────────────────────
-# Page Configuration
+# Page Configuration & Adaptive CSS
 # ─────────────────────────────────────────────
 st.set_page_config(page_title="AstroVantage", page_icon="🔭", layout="wide")
 
-# ─────────────────────────────────────────────
-# Custom CSS - Bright Gold & High Contrast
-# ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* Main Background */
+    /* Adaptive & Pro Dark Theme */
     html, body, [data-testid="stAppViewContainer"] {
-        background-color: #16181c !important; 
-        color: #ffffff !important;
+        background-color: #111418 !important; 
+        color: #f1f5f9 !important;
     }
     
-    [data-testid="stSidebar"] {
-        background-color: #1c1f26 !important;
-    }
+    /* Sidebar styling */
+    [data-testid="stSidebar"] { background-color: #1a1d23 !important; }
 
-    /* Target Metrics to be BRIGHT GOLD */
+    /* Bright Gold Accents */
+    h1, h2, h3, .gold-text { color: #FFD700 !important; font-weight: 700 !important; }
+    
     [data-testid="stMetricValue"] {
-        color: #FFD700 !important; /* Bright Gold */
-        font-weight: 800 !important;
-        font-size: 2.2rem !important;
-    }
-    [data-testid="stMetricLabel"] {
-        color: #ffffff !important;
-        font-size: 0.9rem !important;
-        letter-spacing: 0.1em !important;
-    }
-
-    /* Table Styling */
-    .stTable {
-        background-color: transparent !important;
-    }
-    [data-testid="stTable"] th {
-        color: #FFD700 !important; /* Gold Headers */
-        background-color: #1c1f26 !important;
-        font-size: 0.85rem !important;
-    }
-    [data-testid="stTable"] td {
-        color: #ffffff !important;
-        border-bottom: 1px solid #2d333f !important;
-        font-size: 1rem !important;
-    }
-
-    /* Section Headers in Gold */
-    h1, h2, h3, h4 {
         color: #FFD700 !important;
+        font-weight: 800 !important;
+        font-size: clamp(1.5rem, 5vw, 2.2rem) !important; /* Adaptive Font */
     }
 
-    /* Entry Zone Box */
-    .entry-box {
-        background: #1c1f26;
-        border: 2px solid #FFD700;
-        padding: 20px;
-        border-radius: 12px;
+    /* Professional Cards */
+    .st-emotion-cache-1r6slb0 { /* Metric Container */
+        background-color: #1e222a !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
     }
-    
-    .astro-panel {
-        background: #1c1f26;
-        border: 1px solid #444;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 15px;
+
+    .astro-card {
+        background: #1e222a;
+        border-left: 5px solid #FFD700;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+
+    /* Adaptive Table */
+    .stTable { width: 100% !important; overflow-x: auto !important; }
+    [data-testid="stTable"] th { color: #FFD700 !important; background-color: #2d333f !important; }
+
+    /* Button Styling */
+    .stButton>button {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #FFD700;
+        color: #FFD700;
+        background-color: transparent;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        background-color: #FFD700;
+        color: #111418;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# Application UI
+# Main Logic
 # ─────────────────────────────────────────────
 def main():
     # Header
-    col_h1, col_h2 = st.columns([2, 1])
-    with col_h1:
-        st.markdown("<h1 style='margin:0;'>🔭 AstroVantage</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#ffffff;'>MAGNIFICENT SEVEN · CANSLIM + URANIAN ASTROLOGY</p>", unsafe_allow_html=True)
-    with col_h2:
-        st.markdown("<div style='text-align:right; color:#FFD700; font-size:1rem; font-weight:bold;'>☀️ ARIES INGRESS<br>March 20, 2026</div>", unsafe_allow_html=True)
+    col_title, col_status = st.columns([3, 1])
+    with col_title:
+        st.markdown("<h1 style='margin-bottom:0;'>🔭 AstroVantage</h1>", unsafe_allow_html=True)
+        st.caption("FINANCIAL ASTROLOGY & QUANT SCREENER")
+    with col_status:
+        st.markdown("<div style='text-align:right; color:#FFD700;'><b>☀️ ARIES INGRESS</b><br><small>Equinox Cycle 2026</small></div>", unsafe_allow_html=True)
 
-    # Sidebar
+    # Sidebar Controls
     with st.sidebar:
-        st.markdown("<h3 style='color:#FFD700;'>Navigation</h3>", unsafe_allow_html=True)
-        selected_class = st.selectbox("Select Asset Class", options=list(ASSET_UNIVERSE.keys()))
+        st.markdown("<h3 class='gold-text'>Navigation</h3>", unsafe_allow_html=True)
+        selected_class = st.selectbox("Market Universe", options=list(ASSET_UNIVERSE.keys()))
+        
+        # 🔄 Manual Refresh Button
+        if st.button("🔄 Manual Refresh"):
+            st.cache_data.clear()
+            st.rerun()
+            
         st.markdown("---")
         st.info("☿ Mercury Station Direct")
+        st.warning("⚠️ High Volatility Expected")
 
-    # Data Sync
-    with st.spinner("Syncing with stars..."):
+    # Data Processing
+    with st.spinner("Calculating Planetary Aspects..."):
         all_data = fetch_asset_class_data(selected_class)
-        report = generate_daily_report()
+        # ปู่ใส่สูตร Financial Astro ในส่วน report นี้ครับ
+        report = generate_daily_report() 
         signals = screen_all(all_data)
 
-    # 1. LIVE METRICS - GOLD THEME
-    ticker_choice = st.selectbox("Analyze Ticker", options=[s.ticker for s in signals], format_func=display_name)
+    if not signals:
+        st.error("No market data available.")
+        return
+
+    # 1. LIVE PERFORMANCE (Adaptive Grid)
+    ticker_choice = st.selectbox("Select Asset to Inspect", options=[s.ticker for s in signals], format_func=display_name)
     sig = next(s for s in signals if s.ticker == ticker_choice)
 
     st.markdown("---")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("CURRENT PRICE", f"${sig.price:,.2f}")
-    m2.metric("RSI (14)", f"{sig.rsi:.1f}")
-    m3.metric("VOLUME RATIO", f"{sig.volume_ratio:.2f}x")
+    # Adaptive Metrics
+    m1, m2, m3, m4 = st.columns([1,1,1,1])
+    m1.metric("PRICE", f"${sig.price:,.2f}")
+    m2.metric("RSI", f"{sig.rsi:.1f}")
+    m3.metric("VOL RATIO", f"{sig.volume_ratio:.2f}x")
     m4.metric("SIGNAL", sig.signal.upper())
 
-    # 2. MAIN DASHBOARD AREA
+    # 2. DASHBOARD LAYOUT (Adaptive Columns)
     col_chart, col_astro = st.columns([2, 1])
 
     with col_chart:
-        st.markdown("### PRICE ACTION")
+        st.markdown("<h3 class='gold-text'>Technical Chart</h3>", unsafe_allow_html=True)
         df_chart = fetch_ohlcv(ticker_choice)
         if not df_chart.empty:
-            fig = go.Figure(data=[go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'])])
-            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0,r=0,t=0,b=0))
+            fig = go.Figure(data=[go.Candlestick(
+                x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close']
+            )])
+            fig.update_layout(
+                template="plotly_dark", 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                height=400,
+                margin=dict(l=10, r=10, t=0, b=0)
+            )
             st.plotly_chart(fig, use_container_width=True)
-        
+
         # Entry Zone Detail
         st.markdown(f"""
-        <div class="entry-box">
-            <small style='color:#ffffff;'>ENTRY ZONE</small>
-            <h2 style='margin:0; color:#FFD700;'>${sig.price * 0.98:,.2f} – ${sig.price * 1.02:,.2f}</h2>
-            <div style='display:flex; justify-content:space-between; margin-top:15px;'>
-                <div><small style='color:#ffffff;'>STOP LOSS</small><br><b style='color:#ef4444;'>${sig.price * 0.92:,.2f}</b></div>
-                <div><small style='color:#ffffff;'>RISK/REWARD</small><br><b style='color:#22c55e;'>1 : 2.0</b></div>
-            </div>
+        <div style="background:#1e222a; border:1px solid #334155; padding:20px; border-radius:12px;">
+            <div style="color:#FFD700; font-weight:bold; margin-bottom:10px;">🎯 GANN ENTRY ZONE</div>
+            <div style="font-size:1.8rem; font-weight:bold;">${sig.price * 0.98:,.2f} – ${sig.price * 1.01:,.2f}</div>
+            <div style="margin-top:10px; color:#ef4444;">Stop Loss: ${sig.price * 0.93:,.2f}</div>
         </div>
         """, unsafe_allow_html=True)
 
     with col_astro:
-        st.markdown("### URANIAN INSIGHTS")
-        for hit in report.active_hits:
-            st.markdown(f"""
-            <div class="astro-panel">
-                <div style="color:#FFD700; font-weight:bold;">⚡ {hit.formula}</div>
-                <div style="font-size:0.9rem; color:#ffffff; line-height:1.5; margin-top:5px;">{hit.interpretation}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    # 3. SCREENER TABLE
-    st.markdown(f"### SCREENER — {selected_class}")
-    df_screen = pd.DataFrame([{
-        "TICKER": s.ticker, "PRICE": f"${s.price:,.2f}", "RSI": f"{s.rsi:.1f}", 
-        "VOL RATIO": f"{s.volume_ratio:.2f}x", "SIGNAL": s.signal.upper()
-    } for s in signals])
-    st.table(df_screen)
-
-if __name__ == "__main__":
-    main()
+        st.markdown("<h3 class='gold-text'>Financial Astro Pictures</h3>", unsafe_allow_html=True)
+        # แสดงผลสูตรพระเคราะห์สนธิ
