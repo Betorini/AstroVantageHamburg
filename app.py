@@ -52,6 +52,15 @@ load_dotenv()
 # a new category here is all that is needed to expose it in the UI.
 
 ASSET_UNIVERSE: dict[str, list[str]] = {
+    "MAG7 & Tech Giants": [
+        "NVDA",   # NVIDIA — AI / GPU
+        "AAPL",   # Apple
+        "MSFT",   # Microsoft
+        "GOOGL",  # Alphabet
+        "AMZN",   # Amazon
+        "META",   # Meta
+        "TSLA",   # Tesla
+    ],
     "Broad Market (ตลาดหลัก)": [
         "^SPX",   # S&P 500 Index  (^GSPC is the yfinance fallback if ^SPX is empty)
         "VOO",    # Vanguard S&P 500 ETF
@@ -65,7 +74,6 @@ ASSET_UNIVERSE: dict[str, list[str]] = {
         "QQQM",   # Invesco NASDAQ-100 ETF (cheaper share price)
         "XLK",    # Technology Select Sector SPDR ETF
         "AVGO",   # Broadcom
-        "NVDA",   # NVIDIA
         "PANW",   # Palo Alto Networks
         "MU",     # Micron Technology
         "ISRG",   # Intuitive Surgical
@@ -93,6 +101,12 @@ ASSET_UNIVERSE: dict[str, list[str]] = {
 APP_UNIVERSE: dict[str, list[str]] = ASSET_UNIVERSE
 
 CLASS_META: dict[str, dict] = {
+    "MAG7 & Tech Giants": {
+        "label":       "MAG7 & Tech Giants",
+        "icon":        "🏆",
+        "accent":      "#FFD700",
+        "description": "หุ้นเทคโนโลยีชั้นนำ · Magnificent Seven · AI Leaders",
+    },
     "Broad Market (ตลาดหลัก)": {
         "label":       "Broad Market",
         "icon":        "🌍",
@@ -102,7 +116,7 @@ CLASS_META: dict[str, dict] = {
     "Growth & Tech (เติบโต)": {
         "label":       "Growth & Tech",
         "icon":        "🚀",
-        "accent":      "#FFD700",
+        "accent":      "#a78bfa",
         "description": "หุ้นเทคโนโลยีและการเติบโต · NASDAQ · Semi · AI",
     },
     "Dividend & Value (ปันผล/คุณค่า)": {
