@@ -1,31 +1,17 @@
-"""
-app.py
-------
-AstroVantage — Main Streamlit Application
-Dark-themed dashboard for Mag 7 stock entry analysis combining
-CAN SLIM technical analysis with Uranian Hamburg School astrology.
-
-Run with: streamlit run app.py
-"""
-
-from __future__ import annotations
-
 import os
-
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from dotenv import load_dotenv
 
+# Import functions from your core modules
 from core.astro_logic import DailyAstroReport, generate_daily_report
 from core.screener import (
     EntrySignal,
-    RiskParameters,
     analyze_ticker,
     calculate_risk_parameters,
     screen_all,
 )
-# --- ส่วนที่ปู่แก้ไขให้เชื่อมต่อกับ fetcher.py ได้เป๊ะๆ ---
 from utils.fetcher import (
     MAG7,
     fetch_all_mag7,
@@ -33,94 +19,111 @@ from utils.fetcher import (
     get_volume_ratio,
 )
 
-# สร้างตัวแปรเสริม (Mock Data) เพื่อให้แอปทำงานได้โดยไม่ Error
+# Mock definitions for missing components
 ASSET_UNIVERSE = {"MAG7": MAG7}
 AssetClass = str
-
-def display_name(t: str) -> str:
-    return t
-
-def fetch_asset_class(asset_class: str):
-    return fetch_all_mag7()
-# --------------------------------------------------
+def display_name(t): return t
+def fetch_asset_class(c): return fetch_all_mag7()
 
 load_dotenv()
 
 # ─────────────────────────────────────────────
 # Page Configuration
 # ─────────────────────────────────────────────
-
 st.set_page_config(
     page_title="AstroVantage",
     page_icon="🔭",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────────
-# Custom CSS — Dark Professional Theme
+# Custom CSS
 # ─────────────────────────────────────────────
-
-st.markdown(
-    """
+st.markdown("""
 <style>
-/* ── Global ── */
-html, body, [data-testid="stAppViewContainer"] {
-    background-color: #0d0f14 !important;
-    color: #e2e8f0;
-    font-family: 'Inter', 'SF Pro Display', system-ui, sans-serif;
-}
-[data-testid="stSidebar"] { background-color: #111318 !important; }
-[data-testid="stHeader"] { background-color: transparent !important; }
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: #0d0f14 !important;
+        color: #e2e8f0;
+    }
+    .section-header {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #a78bfa;
+        margin-top: 20px;
+        border-bottom: 1px solid #1e2538;
+    }
+    .astro-card {
+        background: #161a23;
+        border: 1px solid #1e2538;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-/* ── Metric cards ── */
-[data-testid="metric-container"] {
-    background: #161a23;
-    border: 1px solid #1e2538;
-    border-radius: 10px;
-    padding: 16px 20px;
-}
-[data-testid="stMetricValue"] { color: #f1f5f9 !important; font-size: 1.6rem !important; }
-[data-testid="stMetricLabel"] { color: #94a3b8 !important; font-size: 0.75rem !important; letter-spacing: 0.06em; text-transform: uppercase; }
-[data-testid="stMetricDelta"] { font-size: 0.8rem !important; }
+# ─────────────────────────────────────────────
+# Application UI Functions
+# ─────────────────────────────────────────────
+def render_header():
+    st.markdown("""
+        <div style='text-align: center; padding: 20px;'>
+            <h1 style='color: #a78bfa;'>🔭 AstroVantage</h1>
+            <p style='color: #64748b;'>CAN SLIM + URANIAN ASTROLOGY DASHBOARD</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-/* ── Tabs ── */
-[data-testid="stTabs"] button {
-    color: #64748b;
-    border-radius: 6px 6px 0 0;
-    font-weight: 500;
-    font-size: 0.85rem;
-    letter-spacing: 0.03em;
-}
-[data-testid="stTabs"] button[aria-selected="true"] {
-    color: #a78bfa !important;
-    border-bottom: 2px solid #a78bfa !important;
-    background: #161a23 !important;
-}
+def main():
+    render_header()
+    
+    # Sidebar
+    with st.sidebar:
+        st.title("Settings")
+        selected_class = st.selectbox("Asset Class", options=list(ASSET_UNIVERSE.keys()))
+        st.info("Aries Ingress Active ☀️")
 
-/* ── Buttons ── */
-.stButton > button {
-    background: linear-gradient(135deg, #4f46e5, #7c3aed) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 8px !important;
-    font-weight: 600 !important;
-    padding: 10px 22px !important;
-    letter-spacing: 0.02em;
-    transition: opacity 0.2s;
-}
-.stButton > button:hover { opacity: 0.88; }
+    # Data Processing
+    with st.spinner("Calculating Stars and Stocks..."):
+        all_data = fetch_asset_class(selected_class)
+        report = generate_daily_report()
+        
+    if not all_data:
+        st.error("No data found.")
+        return
 
-/* ── Alert / Info boxes ── */
-.astro-card {
-    background: #12151e;
-    border: 1px solid #1e2538;
-    border-radius: 12px;
-    padding: 18px 22px;
-    margin: 8px 0;
-}
-.astro-card.warning {
-    border-color: #854d0e;
-    background: #1a130a;
-}
-.astro-card.
+    signals = screen_all(all_data)
+
+    # Display Screener Table
+    st.markdown('<div class="section-header">Market Screener Summary</div>', unsafe_allow_html=True)
+    df_display = pd.DataFrame([
+        {"Ticker": s.ticker, "Price": f"${s.price:.2f}", "RSI": f"{s.rsi:.1f}", "Signal": s.signal.upper()}
+        for s in signals
+    ])
+    st.table(df_display)
+
+    # Detailed Analysis
+    st.markdown('<div class="section-header">Detailed Deep Dive</div>', unsafe_allow_html=True)
+    ticker = st.selectbox("Pick a ticker", options=[s.ticker for s in signals])
+    sig = next(s for s in signals if s.ticker == ticker)
+
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader(f"{ticker} Price Action")
+        df_chart = fetch_ohlcv(ticker)
+        fig = go.Figure(data=[go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'])])
+        fig.update_layout(template="plotly_dark", margin=dict(l=0,r=0,b=0,t=0))
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("Uranian Insights")
+        for hit in report.active_hits:
+            st.markdown(f"""
+            <div class="astro-card">
+                <b style="color:#fbbf24;">{hit.formula}</b><br>
+                <small>{hit.interpretation}</small>
+            </div>
+            """, unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
