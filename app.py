@@ -118,6 +118,7 @@ ASSET_UNIVERSE: dict[str, list[str]] = {
         "LLY",    # Eli Lilly
         "JNJ",    # Johnson & Johnson
         "PFE",    # Pfizer
+        "ABBV",   # AbbVie
         "AWK",    # American Water Works
         "WM",     # Waste Management
         "ISRG",   # Intuitive Surgical
@@ -228,6 +229,7 @@ _TICKER_LABELS: dict[str, str] = {
     "LLY":   "Eli Lilly",
     "JNJ":   "Johnson & Johnson",
     "PFE":   "Pfizer",
+    "ABBV":  "AbbVie",
     "AWK":   "American Water Works",
     "WM":    "Waste Management",
     "ISRG":  "Intuitive Surgical",
@@ -235,7 +237,6 @@ _TICKER_LABELS: dict[str, str] = {
     "MU":    "Micron Technology",
     "TMC":   "The Metals Company",
     # ── Previously active but removed from universe (kept for safe_fetch compat)
-    "ABBV":  "AbbVie",
     "XLV":   "Health Care ETF",
     "XLE":   "Energy Sector ETF",
     "XLF":   "Financial Sector ETF",
