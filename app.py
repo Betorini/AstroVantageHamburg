@@ -52,9 +52,9 @@ load_dotenv()
 # a new category here is all that is needed to expose it in the UI.
 
 ASSET_UNIVERSE: dict[str, list[str]] = {
-    "MAG7 & Tech Giants": [
+    "MAG7 & Semi Giants": [
         "NVDA",   # NVIDIA — AI / GPU
-        "TSM",    # TSMC — world's largest chipmaker
+        "TSM",    # TSMC — world's largest foundry
         "AAPL",   # Apple
         "MSFT",   # Microsoft
         "GOOGL",  # Alphabet
@@ -99,28 +99,31 @@ ASSET_UNIVERSE: dict[str, list[str]] = {
         "SLB",    # SLB (Schlumberger)
         "HAL",    # Halliburton
     ],
-    "Growth & Sector ETFs": [
+    "Commodities & Crypto": [
+        "GC=F",      # Gold       — COMEX front-month
+        "SI=F",      # Silver     — COMEX front-month
+        "BTC-USD",   # Bitcoin    — -USD suffix mandatory
+        "ETH-USD",   # Ethereum
+        "SOL-USD",   # Solana     — bare "SOL" = wrong stock ticker
+        "BNB-USD",   # BNB
+        "XRP-USD",   # XRP
+        "DOGE-USD",  # Dogecoin
+    ],
+    "Growth & Healthcare": [
         "QQQ",    # Invesco NASDAQ-100 ETF
         "QQQM",   # Invesco NASDAQ-100 ETF (lower share price)
         "XLK",    # Technology Select Sector SPDR ETF
-        "XLV",    # Health Care Select Sector SPDR ETF
-        "XLE",    # Energy Select Sector SPDR ETF
-        "XLF",    # Financial Select Sector SPDR ETF
         "SCHD",   # Schwab US Dividend Equity ETF
         "VIG",    # Vanguard Dividend Appreciation ETF
-    ],
-    "Healthcare, Utilities & Others": [
-        "LLY",      # Eli Lilly
-        "JNJ",      # Johnson & Johnson
-        "PFE",      # Pfizer
-        "ABBV",     # AbbVie
-        "AWK",      # American Water Works
-        "WM",       # Waste Management
-        "ISRG",     # Intuitive Surgical
-        "PANW",     # Palo Alto Networks
-        "MU",       # Micron Technology
-        "TMC",      # The Metals Company
-        "BTC-USD",  # Bitcoin — -USD suffix mandatory; bare "BTC" = wrong ticker
+        "LLY",    # Eli Lilly
+        "JNJ",    # Johnson & Johnson
+        "PFE",    # Pfizer
+        "AWK",    # American Water Works
+        "WM",     # Waste Management
+        "ISRG",   # Intuitive Surgical
+        "PANW",   # Palo Alto Networks
+        "MU",     # Micron Technology
+        "TMC",    # The Metals Company
     ],
 }
 
@@ -129,11 +132,11 @@ ASSET_UNIVERSE: dict[str, list[str]] = {
 APP_UNIVERSE: dict[str, list[str]] = ASSET_UNIVERSE
 
 CLASS_META: dict[str, dict] = {
-    "MAG7 & Tech Giants": {
-        "label":       "MAG7 & Tech Giants",
+    "MAG7 & Semi Giants": {
+        "label":       "MAG7 & Semi Giants",
         "icon":        "🏆",
         "accent":      "#FFD700",
-        "description": "หุ้นเทคโนโลยีชั้นนำ · Magnificent Seven · TSMC · AI Leaders",
+        "description": "หุ้นเทคโนโลยีชั้นนำ · Magnificent 7 · TSMC · Semis · AI",
     },
     "Broad Market (ตลาดหลัก)": {
         "label":       "Broad Market",
@@ -151,28 +154,28 @@ CLASS_META: dict[str, dict] = {
         "label":       "Oil & Energy",
         "icon":        "🛢️",
         "accent":      "#fb923c",
-        "description": "หุ้นพลังงานและน้ำมัน · Major Oils · E&P · Services",
+        "description": "หุ้นพลังงานและน้ำมัน · Major Oils · E&P · OFS",
     },
-    "Growth & Sector ETFs": {
-        "label":       "Growth & Sector ETFs",
+    "Commodities & Crypto": {
+        "label":       "Commodities & Crypto",
+        "icon":        "₿",
+        "accent":      "#34d399",
+        "description": "โลหะมีค่า · Gold · Silver · Bitcoin · Ethereum · Altcoins",
+    },
+    "Growth & Healthcare": {
+        "label":       "Growth & Healthcare",
         "icon":        "🚀",
         "accent":      "#a78bfa",
-        "description": "ETF กลุ่มอุตสาหกรรม · NASDAQ · Tech · Health · Energy · Finance",
-    },
-    "Healthcare, Utilities & Others": {
-        "label":       "Healthcare & Others",
-        "icon":        "🏥",
-        "accent":      "#f472b6",
-        "description": "การแพทย์ · สาธารณูปโภค · Tech · Crypto · Speculative",
+        "description": "NASDAQ ETFs · เทคโนโลยีและการแพทย์ · Dividend · Speculative",
     },
 }
 
 # ── Friendly display names used in tab labels, screener, and chips ───────────
 # Any ticker not in this dict falls back to the raw symbol (equities work fine).
 _TICKER_LABELS: dict[str, str] = {
-    # ── MAG7 & Tech Giants ───────────────────────────────────────────────────
+    # ── MAG7 & Semi Giants ───────────────────────────────────────────────────
     "TSM":   "TSMC",
-    # (NVDA, AAPL, MSFT, GOOGL, AMZN, META, TSLA, AVGO, ORCL fall back to raw symbol)
+    # NVDA, AAPL, MSFT, GOOGL, AMZN, META, TSLA, AVGO, ORCL → raw symbol
     # ── Indices & broad-market ETFs ──────────────────────────────────────────
     "^SPX":  "S&P 500 Index",
     "VOO":   "Vanguard S&P 500",
@@ -203,38 +206,39 @@ _TICKER_LABELS: dict[str, str] = {
     "PBR":   "Petrobras",
     "SLB":   "SLB (Schlumberger)",
     "HAL":   "Halliburton",
-    # ── Growth & Sector ETFs ─────────────────────────────────────────────────
+    # ── Commodities ───────────────────────────────────────────────────────────
+    "GC=F":  "Gold",
+    "SI=F":  "Silver",
+    "CL=F":  "Crude Oil",
+    "HG=F":  "Copper",
+    "NG=F":  "Nat Gas",
+    # ── Crypto — -USD suffix is mandatory for all; bare symbols = wrong tickers
+    "BTC-USD":  "Bitcoin",
+    "ETH-USD":  "Ethereum",
+    "SOL-USD":  "Solana",
+    "BNB-USD":  "BNB",
+    "XRP-USD":  "XRP",
+    "DOGE-USD": "Dogecoin",
+    # ── Growth & Healthcare ───────────────────────────────────────────────────
     "QQQ":   "NASDAQ-100 ETF",
     "QQQM":  "NASDAQ-100 (QQQM)",
     "XLK":   "Tech Sector ETF",
-    "XLV":   "Health Care ETF",
-    "XLE":   "Energy Sector ETF",
-    "XLF":   "Financial Sector ETF",
     "SCHD":  "Schwab Dividend",
     "VIG":   "Dividend Growth ETF",
-    # ── Healthcare, Utilities & Others ───────────────────────────────────────
     "LLY":   "Eli Lilly",
     "JNJ":   "Johnson & Johnson",
     "PFE":   "Pfizer",
-    "ABBV":  "AbbVie",
     "AWK":   "American Water Works",
     "WM":    "Waste Management",
     "ISRG":  "Intuitive Surgical",
     "PANW":  "Palo Alto Networks",
     "MU":    "Micron Technology",
     "TMC":   "The Metals Company",
-    "BTC-USD": "Bitcoin",
-    # ── Legacy (kept for backwards-compat) ───────────────────────────────────
-    "ETH-USD":  "Ethereum",
-    "SOL-USD":  "Solana",
-    "BNB-USD":  "BNB",
-    "XRP-USD":  "XRP",
-    "DOGE-USD": "Dogecoin",
-    "GC=F":  "Gold",
-    "SI=F":  "Silver",
-    "CL=F":  "Crude Oil",
-    "HG=F":  "Copper",
-    "NG=F":  "Nat Gas",
+    # ── Previously active but removed from universe (kept for safe_fetch compat)
+    "ABBV":  "AbbVie",
+    "XLV":   "Health Care ETF",
+    "XLE":   "Energy Sector ETF",
+    "XLF":   "Financial Sector ETF",
 }
 
 
@@ -385,22 +389,23 @@ button[kind="header"] svg {
     text-transform: uppercase !important;
 }
 
-/* ── 4a. Responsive base font — larger across the board ─────────────────── */
-/* 1.2rem base would break tabs and small labels; use a modest lift instead. */
-/* clamp(min, preferred-vw, max) scales smoothly without overflow.           */
-html, body, [class*="css"] {
-    font-size: clamp(0.92rem, 1.8vw, 1.05rem) !important;
+/* ── 4a. Responsive base font — 1.25rem target, clamped ─────────────────── */
+/* Raw 1.25rem on every element would overflow component labels and tab text. */
+/* Apply it to the body/app shell; component-level sizes use their own clamp. */
+html, body,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"] {
+    font-size: 1.25rem !important;
 }
-/* Sidebar nav — slightly larger than body text */
+[class*="css"] { font-size: clamp(0.95rem, 1.8vw, 1.1rem) !important; }
+/* Sidebar nav — 1.4rem target */
 [data-testid="stSidebarNav"],
 [data-testid="stSidebar"] p,
 [data-testid="stSidebar"] span {
-    font-size: clamp(0.9rem, 2vw, 1.1rem) !important;
+    font-size: clamp(1.0rem, 2.2vw, 1.4rem) !important;
 }
-/* Data table cells */
-.stDataFrame div {
-    font-size: clamp(0.8rem, 1.5vw, 0.95rem) !important;
-}
+/* Data table cells — slightly smaller for data density */
+.stDataFrame div { font-size: clamp(0.85rem, 1.5vw, 1.0rem) !important; }
 
 /* ── 4b. Buttons — guard toggle from inheriting the app button styles ────── */
 /* Without :not([kind="header"]) the toggle gets width:100% and the gradient, */
@@ -411,7 +416,7 @@ html, body, [class*="css"] {
     border: none !important;
     border-radius: 8px !important;
     font-weight: 800 !important;
-    font-size: clamp(0.78rem, 2vw, 0.95rem) !important;
+    font-size: clamp(0.82rem, 2vw, 1.0rem) !important;
     padding: 0.6rem 1.2rem !important;
     transition: opacity 0.15s;
     width: 100%;
@@ -423,27 +428,30 @@ html, body, [class*="css"] {
     background: var(--bg-card) !important;
     border: 1px solid var(--border) !important;
     border-radius: var(--radius) !important;
-    padding: clamp(10px, 2vw, 18px) clamp(12px, 2.5vw, 20px) !important;
+    padding: clamp(10px, 2vw, 20px) clamp(12px, 2.5vw, 22px) !important;
     min-width: 0 !important;       /* critical: prevents overflow in tight grids */
     word-break: break-word;
 }
 [data-testid="stMetricValue"] {
     color: var(--gold) !important;
-    /* Larger than before but clamped: won't overflow a 4-column grid cell.   */
-    /* On iPad mini (768px / 4 cols ≈ 192px per col) 2rem ≈ 32px — fits well. */
-    /* On desktop 2.4rem ≈ 38px — clear and prominent without overflowing.    */
-    font-size: clamp(1.4rem, 4vw, 2.4rem) !important;
+    /* 3.5rem target, clamped so it never overflows a 4-col iPad cell (~180px). */
+    /* clamp floor 1.6rem keeps it readable on small phones.                    */
+    /* clamp ceiling 3.5rem = ~56px on a 1440px desktop — prominent and bold.   */
+    /* The 5.5vw middle ensures smooth scaling across all breakpoints.           */
+    font-size: clamp(1.6rem, 5.5vw, 3.5rem) !important;
     font-weight: 800 !important;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 [data-testid="stMetricLabel"] {
     color: var(--lo) !important;
-    font-size: clamp(0.72rem, 1.8vw, 1.0rem) !important;
+    font-size: clamp(0.78rem, 1.8vw, 1.05rem) !important;
     letter-spacing: 0.06em !important;
     text-transform: uppercase !important;
 }
 [data-testid="stMetricDelta"] {
-    font-size: clamp(0.72rem, 1.6vw, 0.9rem) !important;
+    font-size: clamp(0.75rem, 1.6vw, 0.95rem) !important;
 }
 
 /* ── 6. Tabs ─────────────────────────────────────────────────────────────── */
