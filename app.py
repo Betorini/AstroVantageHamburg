@@ -52,42 +52,39 @@ load_dotenv()
 # a new category here is all that is needed to expose it in the UI.
 
 ASSET_UNIVERSE: dict[str, list[str]] = {
-    "MAG7 & BIG TECH": [
-        "AAPL",   # Apple
-        "MSFT",   # Microsoft
-        "GOOGL",  # Alphabet
-        "AMZN",   # Amazon
-        "META",   # Meta
-        "TSLA",   # Tesla
-        "NVDA",   # NVIDIA
-        "NFLX",   # Netflix
-        "AVGO",   # Broadcom
-        "ORCL",   # Oracle
-        "ADBE",   # Adobe
-        "AMD",    # AMD
-    ],
-    "INDEX & ETFs": [
-        "^SPX",   # S&P 500 Index (use ^GSPC if ^SPX is unavailable on yfinance)
+    "Broad Market (ตลาดหลัก)": [
+        "^SPX",   # S&P 500 Index  (^GSPC is the yfinance fallback if ^SPX is empty)
+        "VOO",    # Vanguard S&P 500 ETF
         "SPY",    # SPDR S&P 500 ETF
+        "VTI",    # Vanguard Total US Market ETF
+        "VT",     # Vanguard Total World ETF
+        "BRK-B",  # Berkshire Hathaway Class B
+    ],
+    "Growth & Tech (เติบโต)": [
         "QQQ",    # Invesco NASDAQ-100 ETF
-        "DIA",    # SPDR Dow Jones ETF
+        "QQQM",   # Invesco NASDAQ-100 ETF (cheaper share price)
+        "XLK",    # Technology Select Sector SPDR ETF
+        "AVGO",   # Broadcom
+        "NVDA",   # NVIDIA
+        "PANW",   # Palo Alto Networks
+        "MU",     # Micron Technology
+        "ISRG",   # Intuitive Surgical
+    ],
+    "Dividend & Value (ปันผล/คุณค่า)": [
         "SCHD",   # Schwab US Dividend Equity ETF
-        "VTI",    # Vanguard Total Stock Market ETF
+        "VIG",    # Vanguard Dividend Appreciation ETF
+        "WM",     # Waste Management
+        "JNJ",    # Johnson & Johnson
+        "MCO",    # Moody's Corp
+        "V",      # Visa Inc
     ],
-    "CRYPTO CURRENCY": [
-        "BTC-USD",   # Bitcoin
-        "ETH-USD",   # Ethereum
-        "SOL-USD",   # Solana  ← bare "SOL" = wrong stock; -USD suffix is mandatory
-        "BNB-USD",   # BNB
-        "XRP-USD",   # XRP
-        "DOGE-USD",  # Dogecoin
+    "Healthcare & Utilities (สุขภาพ/สาธารณูปโภค)": [
+        "LLY",    # Eli Lilly
+        "AWK",    # American Water Works
     ],
-    "COMMODITIES (GANN)": [
-        "GC=F",   # Gold       — COMEX front-month
-        "SI=F",   # Silver     — COMEX front-month
-        "CL=F",   # Crude Oil  — WTI front-month
-        "HG=F",   # Copper     — COMEX front-month
-        "NG=F",   # Natural Gas — NYMEX front-month
+    "Speculative & Others (เก็งกำไร/อื่นๆ)": [
+        "TMC",      # The Metals Company
+        "BTC-USD",  # Bitcoin — -USD suffix mandatory; bare "BTC" = wrong ticker
     ],
 }
 
@@ -96,55 +93,80 @@ ASSET_UNIVERSE: dict[str, list[str]] = {
 APP_UNIVERSE: dict[str, list[str]] = ASSET_UNIVERSE
 
 CLASS_META: dict[str, dict] = {
-    "MAG7 & BIG TECH": {
-        "label":       "MAG7 & Big Tech",
-        "icon":        "🏆",
-        "accent":      "#FFD700",
-        "description": "AAPL · MSFT · GOOGL · AMZN · META · TSLA · NVDA + more",
-    },
-    "INDEX & ETFs": {
-        "label":       "Index & ETFs",
-        "icon":        "📈",
+    "Broad Market (ตลาดหลัก)": {
+        "label":       "Broad Market",
+        "icon":        "🌍",
         "accent":      "#38bdf8",
-        "description": "S&P 500 · NASDAQ-100 · Dow Jones · Dividend ETFs",
+        "description": "ตลาดหุ้นหลัก · S&P 500 · ETF ครอบคลุมตลาด",
     },
-    "CRYPTO CURRENCY": {
-        "label":       "Crypto Currency",
-        "icon":        "₿",
-        "accent":      "#34d399",
-        "description": "BTC · ETH · SOL · BNB · XRP · DOGE",
+    "Growth & Tech (เติบโต)": {
+        "label":       "Growth & Tech",
+        "icon":        "🚀",
+        "accent":      "#FFD700",
+        "description": "หุ้นเทคโนโลยีและการเติบโต · NASDAQ · Semi · AI",
     },
-    "COMMODITIES (GANN)": {
-        "label":       "Commodities (Gann)",
-        "icon":        "🪙",
+    "Dividend & Value (ปันผล/คุณค่า)": {
+        "label":       "Dividend & Value",
+        "icon":        "💰",
+        "accent":      "#4ade80",
+        "description": "หุ้นปันผลและมูลค่า · ETF รายได้ · หุ้น Blue-Chip",
+    },
+    "Healthcare & Utilities (สุขภาพ/สาธารณูปโภค)": {
+        "label":       "Healthcare & Utilities",
+        "icon":        "🏥",
+        "accent":      "#f472b6",
+        "description": "การแพทย์และสาธารณูปโภค · Defensive stocks",
+    },
+    "Speculative & Others (เก็งกำไร/อื่นๆ)": {
+        "label":       "Speculative & Others",
+        "icon":        "⚡",
         "accent":      "#fb923c",
-        "description": "Gold · Silver · Crude Oil · Copper · Natural Gas",
+        "description": "หุ้นเก็งกำไรและ Crypto · ความเสี่ยงสูง",
     },
 }
 
 # ── Friendly display names used in tab labels, screener, and chips ───────────
 # Any ticker not in this dict falls back to the raw symbol (equities work fine).
 _TICKER_LABELS: dict[str, str] = {
-    # Indices & ETFs — map caret-prefixed and ticker symbols to clear names
-    "^SPX":   "S&P 500 Index",
-    "SPY":    "S&P 500 ETF",
-    "QQQ":    "NASDAQ-100 ETF",
-    "DIA":    "Dow Jones ETF",
-    "SCHD":   "Schwab Dividend",
-    "VTI":    "Total Market ETF",
-    # Commodities — raw yfinance futures symbols mapped to plain English
-    "GC=F":   "Gold",
-    "SI=F":   "Silver",
-    "CL=F":   "Crude Oil",
-    "HG=F":   "Copper",
-    "NG=F":   "Nat Gas",
-    # Crypto — strip the "-USD" suffix for brevity in the UI
+    # ── Indices & broad-market ETFs ──────────────────────────────────────────
+    "^SPX":  "S&P 500 Index",
+    "VOO":   "Vanguard S&P 500",
+    "SPY":   "S&P 500 ETF",
+    "VTI":   "Total US Market",
+    "VT":    "Vanguard Total World",
+    "BRK-B": "Berkshire Hathaway",
+    # ── Growth & Tech ETFs / stocks ──────────────────────────────────────────
+    "QQQ":   "NASDAQ-100 ETF",
+    "QQQM":  "NASDAQ-100 (QQQM)",
+    "XLK":   "Tech Sector ETF",
+    "PANW":  "Palo Alto Networks",
+    "MU":    "Micron Technology",
+    "ISRG":  "Intuitive Surgical",
+    # ── Dividend & Value ─────────────────────────────────────────────────────
+    "SCHD":  "Schwab Dividend",
+    "VIG":   "Dividend Growth ETF",
+    "WM":    "Waste Management",
+    "JNJ":   "Johnson & Johnson",
+    "MCO":   "Moody's Corp",
+    "V":     "Visa Inc",
+    # ── Healthcare & Utilities ───────────────────────────────────────────────
+    "LLY":   "Eli Lilly",
+    "AWK":   "American Water Works",
+    # ── Speculative ──────────────────────────────────────────────────────────
+    "TMC":      "The Metals Company",
     "BTC-USD":  "Bitcoin",
+    # ── Legacy crypto (kept for backwards-compat if user re-adds them) ───────
     "ETH-USD":  "Ethereum",
     "SOL-USD":  "Solana",
     "BNB-USD":  "BNB",
     "XRP-USD":  "XRP",
     "DOGE-USD": "Dogecoin",
+    # ── Legacy commodities ────────────────────────────────────────────────────
+    "GC=F":  "Gold",
+    "SI=F":  "Silver",
+    "CL=F":  "Crude Oil",
+    "HG=F":  "Copper",
+    "NG=F":  "Nat Gas",
 }
 
 
@@ -234,7 +256,7 @@ footer                       { display: none !important; }
 /* gradient from .stButton > button (broken look) or is transparent on the dark */
 /* header background (invisible). Style it as a circular gold-tinted button.    */
 button[kind="header"] {
-    background-color: rgba(255, 215, 0, 0.15) !important;
+    background-color: rgba(255, 215, 0, 0.25) !important;
     color:            #FFD700                  !important;
     border:           1px solid rgba(255, 215, 0, 0.4) !important;
     border-radius:    50%                      !important;
@@ -243,8 +265,7 @@ button[kind="header"] {
     min-width:        36px                     !important;
     max-width:        36px                     !important;
     padding:          0                        !important;
-    margin-top:       10px                     !important;
-    margin-left:      12px                     !important;
+    margin:           10px                     !important;
     display:          flex                     !important;
     align-items:      center                   !important;
     justify-content:  center                   !important;
@@ -827,6 +848,20 @@ def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame) -> None:
         '<div class="av-head">Price Action · EMA Overlay</div>',
         unsafe_allow_html=True,
     )
+
+    # ── Data cleaning — prevents squashed chart caused by zero or NaN prices ──
+    # ^SPX and some index tickers can have a stale zero-priced last row when
+    # yfinance returns a partially-formed bar for today's incomplete session.
+    df = df.copy()
+    df = df[df["Close"] > 0]                       # drop zero-price rows
+    df = df.dropna(subset=["Close"])                # drop NaN close rows
+    # If the very last bar has Close == 0 or Open == 0 (incomplete intraday
+    # bar), remove it so it doesn't collapse the y-axis scale to zero.
+    if len(df) > 1 and (df["Close"].iloc[-1] == 0 or df["Open"].iloc[-1] == 0):
+        df = df.iloc[:-1]
+    if df.empty:
+        st.warning(f"No valid price data to plot for {tlabel(ticker)}.")
+        return
 
     # EMA stack
     ema_stack: dict = {}
