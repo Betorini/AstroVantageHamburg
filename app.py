@@ -19,11 +19,31 @@ from utils.fetcher import (
     get_volume_ratio,
 )
 
-# Mock definitions for missing components
-ASSET_UNIVERSE = {"MAG7": MAG7}
-AssetClass = str
-def display_name(t): return t
-def fetch_asset_class(c): return fetch_all_mag7()
+# Configuration for multiple asset classes
+ASSET_UNIVERSE = {
+    "MAG7": MAG7,
+    "CRYPTO": ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD"],
+    "COMMODITIES": ["GC=F", "SI=F", "CL=F"] # Gold, Silver, Crude Oil
+}
+
+def display_name(t: str) -> str:
+    names = {
+        "GC=F": "Gold",
+        "SI=F": "Silver",
+        "CL=F": "Crude Oil",
+        "BTC-USD": "Bitcoin",
+        "ETH-USD": "Ethereum"
+    }
+    return names.get(t, t)
+
+def fetch_asset_class_data(asset_class: str):
+    tickers = ASSET_UNIVERSE.get(asset_class, MAG7)
+    data_dict = {}
+    for t in tickers:
+        df = fetch_ohlcv(t)
+        if not df.empty:
+            data_dict[t] = df
+    return data_dict
 
 load_dotenv()
 
@@ -37,32 +57,25 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────
-# Custom CSS - Optimized for Visibility
+# Custom CSS - English Only & High Contrast
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* Main Background */
     html, body, [data-testid="stAppViewContainer"] {
         background-color: #0d0f14 !important;
         color: #ffffff !important;
     }
-    
-    /* Table Styling for High Contrast */
     .stTable {
         background-color: #161a23 !important;
         border-radius: 10px !important;
         overflow: hidden !important;
         border: 1px solid #2d3748 !important;
     }
-    
-    /* Table Text and Cell Borders */
     [data-testid="stTable"] td, [data-testid="stTable"] th {
         color: #f1f5f9 !important;
         border-bottom: 1px solid #1e2538 !important;
         padding: 12px !important;
     }
-    
-    /* Section Headers */
     .section-header {
         font-size: 1.2rem;
         font-weight: 700;
@@ -72,8 +85,6 @@ st.markdown("""
         padding-bottom: 5px;
         border-bottom: 2px solid #3e3e5e;
     }
-
-    /* Astro Insight Cards */
     .astro-card {
         background: #1c212c;
         border-left: 4px solid #fbbf24;
@@ -86,7 +97,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# Application UI Functions
+# Application UI
 # ─────────────────────────────────────────────
 def render_header():
     st.markdown("""
@@ -99,54 +110,69 @@ def render_header():
 def main():
     render_header()
     
-    # Sidebar
+    # Sidebar Selection
     with st.sidebar:
-        st.title("Settings")
-        selected_class = st.selectbox("Asset Class", options=list(ASSET_UNIVERSE.keys()))
-        st.info("Aries Ingress Active ☀️")
+        st.title("Navigation")
+        selected_class = st.selectbox("Select Asset Class", options=list(ASSET_UNIVERSE.keys()))
+        st.success("Aries Ingress Active ☀️")
 
     # Data Processing
-    with st.spinner("Calculating Stars and Stocks..."):
-        all_data = fetch_asset_class(selected_class)
+    with st.spinner(f"Analyzing {selected_class} stars..."):
+        all_data = fetch_asset_class_data(selected_class)
         report = generate_daily_report()
         
     if not all_data:
-        st.error("No data found.")
+        st.warning("Gathering market data... Please wait.")
         return
 
     signals = screen_all(all_data)
 
-    # Display Screener Table
-    st.markdown('<div class="section-header">Market Screener Summary</div>', unsafe_allow_html=True)
+    # Market Summary
+    st.markdown(f'<div class="section-header">{selected_class} Screener Summary</div>', unsafe_allow_html=True)
     df_display = pd.DataFrame([
-        {"Ticker": s.ticker, "Price": f"${s.price:.2f}", "RSI": f"{s.rsi:.1f}", "Signal": s.signal.upper()}
+        {
+            "Ticker": display_name(s.ticker), 
+            "Price": f"${s.price:,.2f}", 
+            "RSI": f"{s.rsi:.1f}", 
+            "Signal": s.signal.upper()
+        }
         for s in signals
     ])
     st.table(df_display)
 
-    # Detailed Analysis
-    st.markdown('<div class="section-header">Detailed Deep Dive</div>', unsafe_allow_html=True)
-    ticker = st.selectbox("Pick a ticker", options=[s.ticker for s in signals])
-    sig = next(s for s in signals if s.ticker == ticker)
+    # Analysis Section
+    st.markdown('<div class="section-header">Deep Dive Analysis</div>', unsafe_allow_html=True)
+    ticker_choice = st.selectbox("Pick a ticker", options=[s.ticker for s in signals], format_func=display_name)
+    sig = next(s for s in signals if s.ticker == ticker_choice)
 
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.subheader(f"{ticker} Price Action")
-        df_chart = fetch_ohlcv(ticker)
-        fig = go.Figure(data=[go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'])])
-        fig.update_layout(template="plotly_dark", margin=dict(l=0,r=0,b=0,t=0))
-        st.plotly_chart(fig, use_container_width=True)
+        st.subheader(f"{display_name(ticker_choice)} Chart")
+        df_chart = fetch_ohlcv(ticker_choice)
+        if not df_chart.empty:
+            fig = go.Figure(data=[go.Candlestick(
+                x=df_chart.index, 
+                open=df_chart['Open'], 
+                high=df_chart['High'], 
+                low=df_chart['Low'], 
+                close=df_chart['Close']
+            )])
+            fig.update_layout(template="plotly_dark", margin=dict(l=0,r=0,b=0,t=0))
+            st.plotly_chart(fig, use_container_width=True)
 
     with col2:
         st.subheader("Uranian Insights")
-        for hit in report.active_hits:
-            st.markdown(f"""
-            <div class="astro-card">
-                <b style="color:#fbbf24;">{hit.formula}</b><br>
-                <small>{hit.interpretation}</small>
-            </div>
-            """, unsafe_allow_html=True)
+        if report.active_hits:
+            for hit in report.active_hits:
+                st.markdown(f"""
+                <div class="astro-card">
+                    <b style="color:#fbbf24;">{hit.formula}</b><br>
+                    <small>{hit.interpretation}</small>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.write("No major planetary hits today.")
 
 if __name__ == "__main__":
     main()
