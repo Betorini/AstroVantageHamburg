@@ -830,13 +830,233 @@ def render_metrics(sig: EntrySignal) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Planetary Price Levels (PPL)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Colour-coding per planet for chart lines and UI labels
+_PPL_PLANET_COLOURS: dict[str, str] = {
+    "Sun":     "#f8fafc",   # white-silver
+    "Mars":    "#ef4444",   # red
+    "Jupiter": "#FFD700",   # gold
+    "Saturn":  "#94a3b8",   # steel-blue / silver
+    "Uranus":  "#a78bfa",   # purple
+}
+
+
+def calculate_planetary_price_levels(
+    positions: dict,
+    price: float,
+    scales: tuple[float, ...] = (0.1, 1.0, 10.0, 100.0),
+) -> dict[str, list[float]]:
+    """
+    Convert each planet's ecliptic longitude (0–360°) into candidate price levels
+    by multiplying by a set of scale factors, then keeping only the levels that
+    fall within ±40 % of the current stock price.
+
+    Example: Jupiter at 58.7° × scale 10 = $587.0
+             If price is $500, $587 is within 40%, so it's included.
+
+    Args:
+        positions: Dict of planet name → PlanetPosition (from DailyAstroReport).
+        price:     Current closing price of the ticker.
+        scales:    Multipliers to apply to each longitude.
+
+    Returns:
+        Dict of planet_name → sorted list of relevant price levels.
+        Only the 5 target planets (Sun, Mars, Jupiter, Saturn, Uranus) are returned.
+    """
+    target_planets = list(_PPL_PLANET_COLOURS.keys())  # Sun, Mars, Jupiter, Saturn, Uranus
+    result: dict[str, list[float]] = {}
+
+    if price <= 0:
+        return result
+
+    low_bound  = price * 0.60
+    high_bound = price * 1.40
+
+    for planet_name in target_planets:
+        p = positions.get(planet_name)
+        if p is None:
+            continue
+        lon = p.longitude
+        levels: list[float] = []
+        for scale in scales:
+            candidate = round(lon * scale, 2)
+            if low_bound <= candidate <= high_bound:
+                levels.append(candidate)
+        if levels:
+            result[planet_name] = sorted(set(levels))
+
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Advanced Uranian Formulas
+# ─────────────────────────────────────────────────────────────────────────────
+
+def calculate_advanced_formulas(positions: dict) -> list[dict]:
+    """
+    Evaluate the four advanced Uranian / Planetary Picture formulas.
+
+    Each formula defines a "sensitive point" in the zodiac:
+        SP = Planet_A + Planet_B - Planet_C  (mod 360)
+
+    A transit "hits" the sensitive point when any slow-moving planet
+    comes within 2° (the standard Hamburg-School orb).
+
+    The four formulas requested:
+        1. Expansion (Success):  JU = SU + UR - ME
+        2. Market Reversal:      UR = MA + SA - NE
+        3. Massive Wealth:       VU = JU + NE - SA   (VU = Vulkanus TNP)
+        4. Great Success:        KR = JU + UR          (KR = Kronos TNP)
+
+    Returns:
+        List of formula dicts ready to pass to _formula_card().
+    """
+    def lon(name: str) -> Optional[float]:
+        p = positions.get(name)
+        return p.longitude if p else None
+
+    def sensitive_point(a: Optional[float], b: Optional[float],
+                        c: Optional[float] = None) -> Optional[float]:
+        """SP = (A + B - C) mod 360  or  (A + B) mod 360 if no C."""
+        if a is None or b is None:
+            return None
+        val = (a + b - c) % 360.0 if c is not None else (a + b) % 360.0
+        return round(val, 4)
+
+    def check_hit(sp: Optional[float], positions: dict,
+                  orb: float = 2.0) -> tuple[bool, float, str]:
+        """Check if any planet is within orb of sp. Return (hit, best_orb, planet_name)."""
+        if sp is None:
+            return False, 0.0, ""
+        best_orb = orb + 1.0
+        best_planet = ""
+        for pname, p in positions.items():
+            diff = abs(p.longitude - sp) % 360.0
+            arc  = min(diff, 360.0 - diff)
+            if arc < best_orb:
+                best_orb    = arc
+                best_planet = pname
+        hit = best_orb <= orb
+        return hit, round(best_orb, 3), best_planet
+
+    su = lon("Sun");      me = lon("Mercury"); ma = lon("Mars")
+    ju = lon("Jupiter");  sa = lon("Saturn");  ur = lon("Uranus")
+    ne = lon("Neptune")
+
+    # ── 1. JU = SU + UR - ME  (Expansion / Success) ─────────────────────────
+    sp1 = sensitive_point(su, ur, me)
+    hit1, orb1, pln1 = check_hit(sp1, positions)
+
+    # ── 2. UR = MA + SA - NE  (Market Reversal) ──────────────────────────────
+    sp2 = sensitive_point(ma, sa, ne)
+    hit2, orb2, pln2 = check_hit(sp2, positions)
+
+    # ── 3. VU = JU + NE - SA  (Massive Wealth) ───────────────────────────────
+    sp3 = sensitive_point(ju, ne, sa)
+    hit3, orb3, pln3 = check_hit(sp3, positions)
+
+    # ── 4. KR = JU + UR  (Great Success) — two-planet sum ────────────────────
+    sp4 = sensitive_point(ju, ur)
+    hit4, orb4, pln4 = check_hit(sp4, positions)
+
+    def sp_label(sp: Optional[float]) -> str:
+        if sp is None:
+            return "—"
+        signs = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo",
+                 "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"]
+        sign  = signs[int(sp // 30) % 12]
+        deg   = sp % 30
+        return f"{sign} {deg:.1f}°"
+
+    return [
+        {
+            "code":    "JU = SU+UR−ME",
+            "name":    "Expansion (Success)",
+            "planets": "☀️ Sun  +  ⚡ Uranus  −  ☿ Mercury  →  🪐 Jupiter point",
+            "active":  hit1,
+            "orb":     f"{orb1:.2f}°" if hit1 else "—",
+            "sp":      sp_label(sp1),
+            "transit": pln1 if hit1 else "none",
+            "interp":  (
+                "Sensitive point of breakthrough and sudden expansion. "
+                "When activated, favours bold growth moves — gaps up, "
+                "new highs, and momentum acceleration in tech and AI."
+            ),
+            "grandpa": (
+                "Sun plus Uranus minus Mercury — that's the inventor's formula, son. "
+                "Brilliant ideas arrive fast. Execution is where men separate from boys."
+            ),
+        },
+        {
+            "code":    "UR = MA+SA−NE",
+            "name":    "Market Reversal",
+            "planets": "♂ Mars  +  ♄ Saturn  −  ♆ Neptune  →  ⚡ Uranus point",
+            "active":  hit2,
+            "orb":     f"{orb2:.2f}°" if hit2 else "—",
+            "sp":      sp_label(sp2),
+            "transit": pln2 if hit2 else "none",
+            "interp":  (
+                "Classic Hamburg reversal signal. Mars drives aggression, "
+                "Saturn imposes structure, Neptune dissolves illusions. "
+                "Historically marks trend-change inflection points."
+            ),
+            "grandpa": (
+                "Mars and Saturn fighting over Neptune's dream? Son, that's the formula "
+                "that printed the 2000 top and the 2008 bottom. Respect it."
+            ),
+        },
+        {
+            "code":    "VU = JU+NE−SA",
+            "name":    "Massive Wealth (Vulkanus)",
+            "planets": "🪐 Jupiter  +  ♆ Neptune  −  ♄ Saturn  →  Vulkanus point",
+            "active":  hit3,
+            "orb":     f"{orb3:.2f}°" if hit3 else "—",
+            "sp":      sp_label(sp3),
+            "transit": pln3 if hit3 else "none",
+            "interp":  (
+                "Vulkanus point of immense, irresistible force. "
+                "Jupiter's optimism amplified by Neptune's vision, "
+                "freed from Saturn's restriction. Rare generational wealth signal."
+            ),
+            "grandpa": (
+                "VU = JU + NE - SA fired in 1995 and 2010. Both times, "
+                "the bull run lasted longer than anyone expected. "
+                "But it ended, son. It always ends."
+            ),
+        },
+        {
+            "code":    "KR = JU+UR",
+            "name":    "Great Success (Kronos)",
+            "planets": "🪐 Jupiter  +  ⚡ Uranus  →  Kronos / Authority point",
+            "active":  hit4,
+            "orb":     f"{orb4:.2f}°" if hit4 else "—",
+            "sp":      sp_label(sp4),
+            "transit": pln4 if hit4 else "none",
+            "interp":  (
+                "Kronos = authority, leadership, and elevation to high status. "
+                "Jupiter + Uranus = the classic 'lucky break' combination. "
+                "Favours CEOs, earnings surprises, and sector leadership moves."
+            ),
+            "grandpa": (
+                "KR is the king-maker formula. When it lights up a stock chart, "
+                "institutional money follows. Don't fight the kings, son — "
+                "just make sure you're not the bag holder when they leave."
+            ),
+        },
+    ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Candlestick Chart
 # ─────────────────────────────────────────────────────────────────────────────
 
-def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame) -> None:
+def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame,
+                 planet_lines: dict[str, list[float]] | None = None) -> None:
     """
     Interactive Plotly candlestick with EMA overlays, entry-zone shading,
-    stop-loss line, and Aries Ingress marker.
+    stop-loss line, Planetary Price Lines, and Aries Ingress marker.
 
     All add_vline / add_hline / add_hrect calls are individually guarded with
     try/except — a cosmetic annotation failure never crashes the chart.
@@ -926,6 +1146,35 @@ def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame) -> None:
             )
         except Exception:
             pass
+
+    # ── Planetary Price Lines ────────────────────────────────────────────────
+    # Draw gold (Jupiter), red (Mars), and white/silver (Sun) horizontal dashed
+    # lines for each planet whose levels fall within the visible price range.
+    # Each line is individually guarded so a bad level never crashes the chart.
+    if planet_lines:
+        for planet_name, levels in planet_lines.items():
+            colour = _PPL_PLANET_COLOURS.get(planet_name, "#94a3b8")
+            # Use a thinner, more transparent line so PPL don't overpower price
+            lw = 1.2 if planet_name in ("Jupiter", "Mars", "Sun") else 0.9
+            for level in levels:
+                try:
+                    fig.add_hline(
+                        y=level,
+                        line_color=colour,
+                        line_dash="dashdot",
+                        line_width=lw,
+                        opacity=0.55,
+                        annotation_text=f"♃ {planet_name} ${level:,.1f}"
+                                        if planet_name == "Jupiter"
+                                        else f"♂ {planet_name} ${level:,.1f}"
+                                        if planet_name == "Mars"
+                                        else f"☀ {planet_name} ${level:,.1f}",
+                        annotation_position="left",
+                        annotation_font_color=colour,
+                        annotation_font_size=9,
+                    )
+                except Exception:
+                    pass
 
     # Aries Ingress marker — use pd.Timestamp, NOT a plain string
     try:
@@ -1078,18 +1327,19 @@ def render_astro_panel(report: DailyAstroReport) -> None:
 
     sun_l = lon("Sun");    ju_l  = lon("Jupiter"); ur_l = lon("Uranus")
     ve_l  = lon("Venus");  sa_l  = lon("Saturn");  ne_l = lon("Neptune")
-    pl_l  = lon("Pluto")
+    pl_l  = lon("Pluto");  ma_l  = lon("Mars")
 
     # JU = SU/UR from the report's pre-computed active_hits
     ju_hit = next((h for h in report.active_hits if "JU" in h.formula), None)
 
-    # Default states for the four formulas
-    formulas: list[dict] = [
+    # ── Legacy midpoint formulas (Hamburg School originals) ──────────────────
+    legacy_formulas: list[dict] = [
         {
             "code": "JU = SU/UR", "name": "Jupiter = Sun / Uranus",
             "planets": "☀️ Sun  +  ⚡ Uranus  →  🪐 Jupiter",
             "active": bool(ju_hit and ju_hit.is_active),
             "orb": f"{ju_hit.orb:.2f}°" if ju_hit else "—",
+            "sp": "—",
             "interp": (
                 "Sudden tech breakthroughs and euphoric rallies. "
                 "Historically correlates with gap-up opens in AI names."
@@ -1103,7 +1353,7 @@ def render_astro_panel(report: DailyAstroReport) -> None:
         {
             "code": "VE = JU/UR", "name": "Venus = Jupiter / Uranus",
             "planets": "🪐 Jupiter  +  ⚡ Uranus  →  ♀ Venus",
-            "active": False, "orb": "—",
+            "active": False, "orb": "—", "sp": "—",
             "interp": "Sudden windfall energy. Favours financials, luxury goods, and crypto rallies.",
             "grandpa": (
                 "Venus on Jupiter/Uranus? Son, that's the trade "
@@ -1113,7 +1363,7 @@ def render_astro_panel(report: DailyAstroReport) -> None:
         {
             "code": "SA = SU/UR", "name": "Saturn = Sun / Uranus",
             "planets": "☀️ Sun  +  ⚡ Uranus  →  ♄ Saturn",
-            "active": False, "orb": "—",
+            "active": False, "orb": "—", "sp": "—",
             "interp": "Tech ambitions meet regulatory resistance. Structure disrupted by reality.",
             "grandpa": (
                 "Saturn crashing the Sun/Uranus party means the bill "
@@ -1123,7 +1373,7 @@ def render_astro_panel(report: DailyAstroReport) -> None:
         {
             "code": "NE = PL/UR", "name": "Neptune = Pluto / Uranus",
             "planets": "♇ Pluto  +  ⚡ Uranus  →  ♆ Neptune",
-            "active": False, "orb": "—",
+            "active": False, "orb": "—", "sp": "—",
             "interp": (
                 "Generational dissolution of old power structures. "
                 "Crypto and AI narrative cycles at peak confusion or peak clarity."
@@ -1136,7 +1386,7 @@ def render_astro_panel(report: DailyAstroReport) -> None:
         },
     ]
 
-    # Compute VE=JU/UR, SA=SU/UR, NE=PL/UR live
+    # Compute legacy midpoint hits live
     try:
         from core.astro_logic import calculate_midpoint, is_hard_aspect
 
@@ -1144,32 +1394,89 @@ def render_astro_panel(report: DailyAstroReport) -> None:
             ju_ur_mp = calculate_midpoint(ju_l, ur_l)
             if ve_l is not None:
                 hit, _, orb_v = is_hard_aspect(ve_l, ju_ur_mp, orb=2.0)
-                formulas[1]["active"] = hit
-                formulas[1]["orb"]    = f"{orb_v:.2f}°" if hit else "—"
+                legacy_formulas[1]["active"] = hit
+                legacy_formulas[1]["orb"]    = f"{orb_v:.2f}°" if hit else "—"
 
         if sun_l is not None and ur_l is not None:
             su_ur_mp = calculate_midpoint(sun_l, ur_l)
             if sa_l is not None:
                 hit, _, orb_v = is_hard_aspect(sa_l, su_ur_mp, orb=2.0)
-                formulas[2]["active"] = hit
-                formulas[2]["orb"]    = f"{orb_v:.2f}°" if hit else "—"
+                legacy_formulas[2]["active"] = hit
+                legacy_formulas[2]["orb"]    = f"{orb_v:.2f}°" if hit else "—"
 
         if pl_l is not None and ur_l is not None:
             pl_ur_mp = calculate_midpoint(pl_l, ur_l)
             if ne_l is not None:
                 hit, _, orb_v = is_hard_aspect(ne_l, pl_ur_mp, orb=2.0)
-                formulas[3]["active"] = hit
-                formulas[3]["orb"]    = f"{orb_v:.2f}°" if hit else "—"
+                legacy_formulas[3]["active"] = hit
+                legacy_formulas[3]["orb"]    = f"{orb_v:.2f}°" if hit else "—"
     except Exception:
-        pass  # Non-fatal: formula cards still render with default state
+        pass
 
-    # Render formula cards
-    for f in formulas:
+    # ── Advanced Planetary Picture formulas ───────────────────────────────────
+    advanced_formulas = calculate_advanced_formulas(positions)
+
+    # ── Render: legacy formulas first, then advanced ──────────────────────────
+    st.markdown(
+        '<div style="font-size:0.64rem;font-weight:800;letter-spacing:0.1em;'
+        'text-transform:uppercase;color:#475569;margin:10px 0 6px;">Hamburg School Midpoints</div>',
+        unsafe_allow_html=True,
+    )
+    for f in legacy_formulas:
         st.markdown(
             _formula_card(
                 f["code"], f["name"], f["planets"],
                 f["active"], f["orb"], f["interp"], f["grandpa"],
             ),
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        '<div style="font-size:0.64rem;font-weight:800;letter-spacing:0.1em;'
+        'text-transform:uppercase;color:#475569;margin:14px 0 6px;">Advanced Planetary Pictures</div>',
+        unsafe_allow_html=True,
+    )
+    for f in advanced_formulas:
+        # Advanced cards show the sensitive-point zodiac position
+        sp_note = f' <span style="color:#64748b;font-size:0.7rem;">SP: {f["sp"]}</span>' \
+                  if f.get("sp") and f["sp"] != "—" else ""
+        transit_note = (
+            f' <span style="color:#a78bfa;font-size:0.7rem;">transit: {f["transit"]}</span>'
+            if f.get("transit") and f["transit"] not in ("", "none") else ""
+        )
+        card_html = _formula_card(
+            f["code"] + (sp_note + transit_note),
+            f["name"], f["planets"],
+            f["active"], f["orb"], f["interp"], f["grandpa"],
+        )
+        st.markdown(card_html, unsafe_allow_html=True)
+
+    # ── Planetary Price Level summary card ───────────────────────────────────
+    st.markdown(
+        '<div style="font-size:0.64rem;font-weight:800;letter-spacing:0.1em;'
+        'text-transform:uppercase;color:#475569;margin:14px 0 6px;">Planetary Price Levels (chart)</div>',
+        unsafe_allow_html=True,
+    )
+    ppl_rows = []
+    for pname, colour in _PPL_PLANET_COLOURS.items():
+        p = positions.get(pname)
+        if p:
+            ppl_rows.append(
+                f'<div class="prow">'
+                f'<span style="color:{colour};font-weight:600;">{pname}</span>'
+                f'<span style="color:#64748b;font-size:0.72rem;">{p.sign} {p.sign_degree:.1f}°</span>'
+                f'<span style="color:#94a3b8;font-size:0.7rem;">'
+                f'×0.1 / ×1 / ×10 / ×100'
+                f'</span>'
+                f"</div>"
+            )
+    if ppl_rows:
+        st.markdown(
+            '<div class="av-card" style="padding:10px 14px;">'
+            + "".join(ppl_rows)
+            + '<div style="color:#475569;font-size:0.68rem;margin-top:8px;">'
+            '  Lines drawn on chart where any scale matches ±40% of current price.'
+            '</div></div>',
             unsafe_allow_html=True,
         )
 
@@ -1313,7 +1620,16 @@ def main() -> None:
                 "<div class='av-mid-left'>",
                 unsafe_allow_html=True,
             )
-            render_chart(ticker, sig, df)
+            # Compute Planetary Price Levels for this ticker's current price
+            planet_lines: dict[str, list[float]] = {}
+            if report is not None:
+                try:
+                    planet_lines = calculate_planetary_price_levels(
+                        report.planet_positions, sig.price
+                    )
+                except Exception:
+                    pass
+            render_chart(ticker, sig, df, planet_lines=planet_lines)
             render_gann_box(sig)
             st.markdown("</div>", unsafe_allow_html=True)
 
