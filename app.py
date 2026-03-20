@@ -66,6 +66,14 @@ ASSET_UNIVERSE: dict[str, list[str]] = {
         "ADBE",   # Adobe
         "AMD",    # AMD
     ],
+    "INDEX & ETFs": [
+        "^SPX",   # S&P 500 Index (use ^GSPC if ^SPX is unavailable on yfinance)
+        "SPY",    # SPDR S&P 500 ETF
+        "QQQ",    # Invesco NASDAQ-100 ETF
+        "DIA",    # SPDR Dow Jones ETF
+        "SCHD",   # Schwab US Dividend Equity ETF
+        "VTI",    # Vanguard Total Stock Market ETF
+    ],
     "CRYPTO CURRENCY": [
         "BTC-USD",   # Bitcoin
         "ETH-USD",   # Ethereum
@@ -94,6 +102,12 @@ CLASS_META: dict[str, dict] = {
         "accent":      "#FFD700",
         "description": "AAPL · MSFT · GOOGL · AMZN · META · TSLA · NVDA + more",
     },
+    "INDEX & ETFs": {
+        "label":       "Index & ETFs",
+        "icon":        "📈",
+        "accent":      "#38bdf8",
+        "description": "S&P 500 · NASDAQ-100 · Dow Jones · Dividend ETFs",
+    },
     "CRYPTO CURRENCY": {
         "label":       "Crypto Currency",
         "icon":        "₿",
@@ -111,12 +125,19 @@ CLASS_META: dict[str, dict] = {
 # ── Friendly display names used in tab labels, screener, and chips ───────────
 # Any ticker not in this dict falls back to the raw symbol (equities work fine).
 _TICKER_LABELS: dict[str, str] = {
-    # Commodities — raw yfinance symbols are cryptic; map to plain English
-    "GC=F":    "Gold",
-    "SI=F":    "Silver",
-    "CL=F":    "Crude Oil",
-    "HG=F":    "Copper",
-    "NG=F":    "Nat Gas",
+    # Indices & ETFs — map caret-prefixed and ticker symbols to clear names
+    "^SPX":   "S&P 500 Index",
+    "SPY":    "S&P 500 ETF",
+    "QQQ":    "NASDAQ-100 ETF",
+    "DIA":    "Dow Jones ETF",
+    "SCHD":   "Schwab Dividend",
+    "VTI":    "Total Market ETF",
+    # Commodities — raw yfinance futures symbols mapped to plain English
+    "GC=F":   "Gold",
+    "SI=F":   "Silver",
+    "CL=F":   "Crude Oil",
+    "HG=F":   "Copper",
+    "NG=F":   "Nat Gas",
     # Crypto — strip the "-USD" suffix for brevity in the UI
     "BTC-USD":  "Bitcoin",
     "ETH-USD":  "Ethereum",
