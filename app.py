@@ -44,6 +44,13 @@ from utils.fetcher import fetch_ohlcv
 load_dotenv()
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Authentication
+# ─────────────────────────────────────────────────────────────────────────────
+# Change this to any password before deploying.
+# Students enter this in the sidebar to unlock the terminal.
+APP_PASSWORD: str = "Astro2026"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Asset universe
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -818,12 +825,12 @@ def safe_astro_report() -> Optional[DailyAstroReport]:
 # Sidebar
 # ─────────────────────────────────────────────────────────────────────────────
 
-def render_sidebar() -> tuple[str, bool, bool]:
+def render_sidebar() -> tuple[str, bool, bool, bool]:
     """
     Render the sidebar controls.
 
     Returns:
-        (selected_class_key, show_planetary_price_lines, show_tnp_lines)
+        (selected_class_key, show_ppl, show_tnp, authenticated)
     """
     with st.sidebar:
         st.markdown(
@@ -837,7 +844,45 @@ def render_sidebar() -> tuple[str, bool, bool]:
             unsafe_allow_html=True,
         )
 
-        # ── Asset class selectbox ────────────────────────────────────────────
+        # ── Password gate ────────────────────────────────────────────────────
+        st.markdown(
+            '<div style="font-size:0.66rem;font-weight:800;letter-spacing:0.1em;'
+            'text-transform:uppercase;color:#FFD700;margin-bottom:6px;">🔐 Student Access</div>',
+            unsafe_allow_html=True,
+        )
+        pwd_input: str = st.text_input(
+            "Password",
+            type="password",
+            placeholder="Enter your student password…",
+            label_visibility="collapsed",
+        )
+        authenticated: bool = (pwd_input == APP_PASSWORD) and (len(pwd_input) > 0)
+
+        if pwd_input and not authenticated:
+            st.markdown(
+                '<div style="color:#ef4444;font-size:0.72rem;margin-top:4px;">'
+                "❌ Incorrect password — please try again."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        elif authenticated:
+            st.markdown(
+                '<div style="color:#22c55e;font-size:0.72rem;margin-top:4px;">'
+                "✅ Access granted — welcome!"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div style="color:#64748b;font-size:0.68rem;margin-top:4px;">'
+                "Enter the password your instructor provided."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+        # ── Asset class selectbox (always visible so layout doesn't jump) ───
         st.markdown(
             '<div style="font-size:0.66rem;font-weight:800;letter-spacing:0.1em;'
             'text-transform:uppercase;color:#FFD700;margin-bottom:6px;">Asset Class</div>',
@@ -945,7 +990,7 @@ def render_sidebar() -> tuple[str, bool, bool]:
             unsafe_allow_html=True,
         )
 
-    return sel, show_ppl, show_tnp
+    return sel, show_ppl, show_tnp, authenticated
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2245,8 +2290,61 @@ def render_screener(signals: list[EntrySignal], class_label: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    # 1. Sidebar (first widget call — required by Streamlit)
-    sel, show_ppl, show_tnp = render_sidebar()
+    # 1. Sidebar — always rendered first (Streamlit requirement)
+    sel, show_ppl, show_tnp, authenticated = render_sidebar()
+
+    # ── Auth gate — show locked screen until correct password is entered ─────
+    if not authenticated:
+        st.markdown(
+            '<div style="'
+            'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+            'min-height:60vh;text-align:center;padding:2rem;">'
+
+            # Logo
+            '<div style="font-size:5rem;margin-bottom:1rem;">🔭</div>'
+
+            # Title
+            '<h1 style="color:#FFD700;font-size:clamp(1.6rem,4vw,2.4rem);'
+            'font-weight:800;margin:0 0 0.5rem;">AstroVantage</h1>'
+
+            # Subtitle
+            '<p style="color:#5a6474;font-size:clamp(0.78rem,2vw,0.9rem);'
+            'letter-spacing:0.08em;margin:0 0 2rem;">'
+            'CAN SLIM · URANIAN ASTROLOGY · QUANT FINANCE</p>'
+
+            # Lock card
+            '<div style="'
+            'background:#1e2028;border:1px solid #2d3148;border-radius:16px;'
+            'padding:2rem 2.5rem;max-width:480px;width:100%;">'
+
+            '<div style="font-size:2.5rem;margin-bottom:1rem;">🔐</div>'
+
+            '<h2 style="color:#f1f5f9;font-size:clamp(1rem,2.5vw,1.3rem);'
+            'font-weight:700;margin:0 0 0.75rem;">'
+            'Welcome to AstroVantage Terminal</h2>'
+
+            '<p style="color:#94a3b8;font-size:clamp(0.78rem,1.8vw,0.88rem);'
+            'line-height:1.6;margin:0 0 1.25rem;">'
+            'This is a private financial astrology terminal for enrolled students.<br>'
+            'Please enter your student password in the <strong style="color:#FFD700;">'
+            'sidebar</strong> to access live charts, Uranian formulas, '
+            'and the planetary ingress calendar.'
+            '</p>'
+
+            '<div style="'
+            'background:#16181c;border:1px solid #FFD700;border-radius:8px;'
+            'padding:0.75rem 1rem;'
+            'font-size:clamp(0.72rem,1.6vw,0.82rem);color:#FFD700;">'
+            '← Open the sidebar and enter your password to begin'
+            '</div>'
+
+            '</div>'  # lock card
+            '</div>',  # outer flex
+            unsafe_allow_html=True,
+        )
+        return   # nothing else rendered until authenticated
+
+    # ── Authenticated — render the full dashboard ────────────────────────────
 
     # 2. Header
     render_header(sel)
