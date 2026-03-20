@@ -643,7 +643,10 @@ def render_sidebar() -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_header(sel: str) -> None:
-    meta = CLASS_META.get(sel, CLASS_META["MAG7"])
+    # Use the first key of ASSET_UNIVERSE as the fallback so this line never
+    # goes stale when category names change.
+    _default_key = next(iter(ASSET_UNIVERSE))
+    meta = CLASS_META.get(sel, CLASS_META[_default_key])
     col_l, col_r = st.columns([3, 1])
 
     with col_l:
