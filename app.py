@@ -47,28 +47,88 @@ load_dotenv()
 # Asset universe
 # ─────────────────────────────────────────────────────────────────────────────
 
-APP_UNIVERSE: dict[str, list[str]] = {
-    "MAG7":        ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA"],
-    "CRYPTO":      ["BTC-USD", "ETH-USD", "SOL-USD"],
-    "COMMODITIES": ["GC=F", "SI=F", "CL=F"],
+# ─── ASSET_UNIVERSE is the single source of truth for all category menus. ───
+# The sidebar selectbox reads list(ASSET_UNIVERSE.keys()) directly so adding
+# a new category here is all that is needed to expose it in the UI.
+
+ASSET_UNIVERSE: dict[str, list[str]] = {
+    "MAG7 & BIG TECH": [
+        "AAPL",   # Apple
+        "MSFT",   # Microsoft
+        "GOOGL",  # Alphabet
+        "AMZN",   # Amazon
+        "META",   # Meta
+        "TSLA",   # Tesla
+        "NVDA",   # NVIDIA
+        "NFLX",   # Netflix
+        "AVGO",   # Broadcom
+        "ORCL",   # Oracle
+        "ADBE",   # Adobe
+        "AMD",    # AMD
+    ],
+    "CRYPTO CURRENCY": [
+        "BTC-USD",   # Bitcoin
+        "ETH-USD",   # Ethereum
+        "SOL-USD",   # Solana  ← bare "SOL" = wrong stock; -USD suffix is mandatory
+        "BNB-USD",   # BNB
+        "XRP-USD",   # XRP
+        "DOGE-USD",  # Dogecoin
+    ],
+    "COMMODITIES (GANN)": [
+        "GC=F",   # Gold       — COMEX front-month
+        "SI=F",   # Silver     — COMEX front-month
+        "CL=F",   # Crude Oil  — WTI front-month
+        "HG=F",   # Copper     — COMEX front-month
+        "NG=F",   # Natural Gas — NYMEX front-month
+    ],
 }
+
+# Keep APP_UNIVERSE as an alias so the rest of the file, which references
+# APP_UNIVERSE throughout, needs zero further changes.
+APP_UNIVERSE: dict[str, list[str]] = ASSET_UNIVERSE
 
 CLASS_META: dict[str, dict] = {
-    "MAG7":        {"label": "Magnificent Seven", "icon": "🏆", "accent": "#FFD700",
-                    "description": "Large-cap AI & tech leaders"},
-    "CRYPTO":      {"label": "Cryptocurrencies",  "icon": "₿",  "accent": "#34d399",
-                    "description": "BTC · ETH · SOL"},
-    "COMMODITIES": {"label": "Commodities",        "icon": "🪙", "accent": "#fb923c",
-                    "description": "Gold · Silver · Crude Oil"},
+    "MAG7 & BIG TECH": {
+        "label":       "MAG7 & Big Tech",
+        "icon":        "🏆",
+        "accent":      "#FFD700",
+        "description": "AAPL · MSFT · GOOGL · AMZN · META · TSLA · NVDA + more",
+    },
+    "CRYPTO CURRENCY": {
+        "label":       "Crypto Currency",
+        "icon":        "₿",
+        "accent":      "#34d399",
+        "description": "BTC · ETH · SOL · BNB · XRP · DOGE",
+    },
+    "COMMODITIES (GANN)": {
+        "label":       "Commodities (Gann)",
+        "icon":        "🪙",
+        "accent":      "#fb923c",
+        "description": "Gold · Silver · Crude Oil · Copper · Natural Gas",
+    },
 }
 
+# ── Friendly display names used in tab labels, screener, and chips ───────────
+# Any ticker not in this dict falls back to the raw symbol (equities work fine).
 _TICKER_LABELS: dict[str, str] = {
-    "GC=F":    "Gold",      "SI=F":    "Silver",
-    "CL=F":    "Crude Oil", "BTC-USD": "BTC",
-    "ETH-USD": "ETH",       "SOL-USD": "SOL",
+    # Commodities — raw yfinance symbols are cryptic; map to plain English
+    "GC=F":    "Gold",
+    "SI=F":    "Silver",
+    "CL=F":    "Crude Oil",
+    "HG=F":    "Copper",
+    "NG=F":    "Nat Gas",
+    # Crypto — strip the "-USD" suffix for brevity in the UI
+    "BTC-USD":  "Bitcoin",
+    "ETH-USD":  "Ethereum",
+    "SOL-USD":  "Solana",
+    "BNB-USD":  "BNB",
+    "XRP-USD":  "XRP",
+    "DOGE-USD": "Dogecoin",
 }
+
 
 def tlabel(t: str) -> str:
+    """Return a human-friendly display name for a raw yfinance ticker symbol."""
     return _TICKER_LABELS.get(t, t)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -491,7 +551,12 @@ def safe_astro_report() -> Optional[DailyAstroReport]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_sidebar() -> str:
-    """Render the sidebar and return the selected asset-class key."""
+    """
+    Render the sidebar and return the selected asset-class key.
+
+    The selectbox options are always derived from list(ASSET_UNIVERSE.keys())
+    so adding a new category to ASSET_UNIVERSE automatically exposes it here.
+    """
     with st.sidebar:
         st.markdown(
             '<div style="text-align:center;padding:16px 0 20px;">'
@@ -505,33 +570,41 @@ def render_sidebar() -> str:
         )
 
         # ── Asset class selectbox ────────────────────────────────────────────
+        # Options are read directly from ASSET_UNIVERSE so the menu always
+        # reflects the full current universe without any manual sync needed.
         st.markdown(
             '<div style="font-size:0.66rem;font-weight:800;letter-spacing:0.1em;'
             'text-transform:uppercase;color:#FFD700;margin-bottom:6px;">Asset Class</div>',
             unsafe_allow_html=True,
         )
-        keys = list(APP_UNIVERSE.keys())
-        labels = [f"{CLASS_META[k]['icon']}  {CLASS_META[k]['label']}" for k in keys]
+        keys: list[str] = list(ASSET_UNIVERSE.keys())
+        labels: list[str] = [
+            f"{CLASS_META[k]['icon']}  {CLASS_META[k]['label']}" for k in keys
+        ]
         idx: int = st.selectbox(
-            "ac", options=range(len(keys)),
+            "ac",
+            options=range(len(keys)),
             format_func=lambda i: labels[i],
-            index=0, label_visibility="collapsed",
+            index=0,
+            label_visibility="collapsed",
         )
         sel: str = keys[idx]
         meta = CLASS_META[sel]
 
         st.markdown(
-            f'<div style="font-size:0.74rem;color:{meta["accent"]};'
-            f'margin:4px 0 10px;">{meta["description"]}</div>',
+            f'<div style="font-size:0.72rem;color:{meta["accent"]};'
+            f'margin:4px 0 10px;line-height:1.5;">{meta["description"]}</div>',
             unsafe_allow_html=True,
         )
 
+        # Ticker chips — flex-wrap handles 12-ticker lists cleanly
         chips = "".join(
             f'<span class="sb-chip">{tlabel(t)}</span>'
-            for t in APP_UNIVERSE[sel]
+            for t in ASSET_UNIVERSE[sel]
         )
         st.markdown(
-            f'<div style="line-height:2.4;margin-bottom:14px;">{chips}</div>',
+            f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px;">'
+            f"{chips}</div>",
             unsafe_allow_html=True,
         )
 
