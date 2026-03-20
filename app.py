@@ -761,12 +761,12 @@ def safe_astro_report() -> Optional[DailyAstroReport]:
 # Sidebar
 # ─────────────────────────────────────────────────────────────────────────────
 
-def render_sidebar() -> str:
+def render_sidebar() -> tuple[str, bool]:
     """
-    Render the sidebar and return the selected asset-class key.
+    Render the sidebar controls.
 
-    The selectbox options are always derived from list(ASSET_UNIVERSE.keys())
-    so adding a new category to ASSET_UNIVERSE automatically exposes it here.
+    Returns:
+        (selected_class_key, show_planetary_price_lines)
     """
     with st.sidebar:
         st.markdown(
@@ -781,8 +781,6 @@ def render_sidebar() -> str:
         )
 
         # ── Asset class selectbox ────────────────────────────────────────────
-        # Options are read directly from ASSET_UNIVERSE so the menu always
-        # reflects the full current universe without any manual sync needed.
         st.markdown(
             '<div style="font-size:0.66rem;font-weight:800;letter-spacing:0.1em;'
             'text-transform:uppercase;color:#FFD700;margin-bottom:6px;">Asset Class</div>',
@@ -808,7 +806,7 @@ def render_sidebar() -> str:
             unsafe_allow_html=True,
         )
 
-        # Ticker chips — flex-wrap handles 12-ticker lists cleanly
+        # Ticker chips — flex-wrap handles 13-ticker lists cleanly
         chips = "".join(
             f'<span class="sb-chip">{tlabel(t)}</span>'
             for t in ASSET_UNIVERSE[sel]
@@ -819,7 +817,21 @@ def render_sidebar() -> str:
             unsafe_allow_html=True,
         )
 
+        # ── Planetary Price Lines toggle ─────────────────────────────────────
+        st.markdown("<hr style='margin:8px 0;'>", unsafe_allow_html=True)
+        show_ppl: bool = st.checkbox(
+            "🪐 Show Planetary Price Lines",
+            value=True,
+            help=(
+                "Draws auto-scaled Jupiter (Gold) and Saturn (Silver) "
+                "price levels on the chart. Levels are scaled from each "
+                "planet's current ecliptic longitude (0–360°) to match "
+                "the ticker's price range."
+            ),
+        )
+
         # ── Manual Refresh ───────────────────────────────────────────────────
+        st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
         if st.button("🔄  Manual Refresh", use_container_width=True):
             for k in ("screener_signals", "_last_class", "astro_report"):
                 st.session_state.pop(k, None)
@@ -846,7 +858,7 @@ def render_sidebar() -> str:
             unsafe_allow_html=True,
         )
 
-    return sel
+    return sel, show_ppl
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -942,46 +954,71 @@ _PPL_PLANET_COLOURS: dict[str, str] = {
 def calculate_planetary_price_levels(
     positions: dict,
     price: float,
-    scales: tuple[float, ...] = (0.1, 1.0, 10.0, 100.0),
 ) -> dict[str, list[float]]:
     """
-    Convert each planet's ecliptic longitude (0–360°) into candidate price levels
-    by multiplying by a set of scale factors, then keeping only the levels that
-    fall within ±40 % of the current stock price.
+    Convert Jupiter and Saturn ecliptic longitudes into the price level(s)
+    that land within ±50% of the current stock/crypto price.
 
-    Example: Jupiter at 58.7° × scale 10 = $587.0
-             If price is $500, $587 is within 40%, so it's included.
+    Algorithm — "continuous multiply/divide by 10 until in range":
+        Start with base = longitude.
+        Repeatedly multiply or divide by 10 until the candidate is within
+        the [price * 0.5, price * 1.5] window.
+        At most ONE level per planet is returned (the closest match).
+
+    This ensures lines ALWAYS appear on charts regardless of whether the
+    price is $0.0001 (DOGE) or $100,000 (BTC) or $890 (NVDA).
+
+    Only Jupiter (gold) and Saturn (silver) are drawn per the request.
+    Other planets remain available in _PPL_PLANET_COLOURS for future use.
 
     Args:
-        positions: Dict of planet name → PlanetPosition (from DailyAstroReport).
+        positions: Dict of planet name → PlanetPosition.
         price:     Current closing price of the ticker.
-        scales:    Multipliers to apply to each longitude.
 
     Returns:
-        Dict of planet_name → sorted list of relevant price levels.
-        Only the 5 target planets (Sun, Mars, Jupiter, Saturn, Uranus) are returned.
+        Dict of planet_name → [single best price level].
+        Returns {} when price ≤ 0 or positions are missing.
     """
-    target_planets = list(_PPL_PLANET_COLOURS.keys())  # Sun, Mars, Jupiter, Saturn, Uranus
-    result: dict[str, list[float]] = {}
-
     if price <= 0:
-        return result
+        return {}
 
-    low_bound  = price * 0.60
-    high_bound = price * 1.40
+    target_planets = ["Jupiter", "Saturn"]   # gold + silver lines on chart
+    low  = price * 0.50
+    high = price * 1.50
+    result: dict[str, list[float]] = {}
 
     for planet_name in target_planets:
         p = positions.get(planet_name)
-        if p is None:
+        if p is None or p.longitude <= 0:
             continue
-        lon = p.longitude
-        levels: list[float] = []
-        for scale in scales:
-            candidate = round(lon * scale, 2)
-            if low_bound <= candidate <= high_bound:
-                levels.append(candidate)
-        if levels:
-            result[planet_name] = sorted(set(levels))
+
+        lon = p.longitude  # 0–360 degrees
+        candidate = lon
+
+        # Avoid infinite loops: max 12 steps in each direction is enough
+        # to cover the full range from sub-penny crypto to BTC.
+        MAX_STEPS = 14
+
+        if candidate < low:
+            # longitude is too small — multiply by 10 until in range
+            for _ in range(MAX_STEPS):
+                candidate *= 10.0
+                if low <= candidate <= high:
+                    break
+                if candidate > high * 10:
+                    break  # overshot, no clean match
+        elif candidate > high:
+            # longitude is too large — divide by 10 until in range
+            for _ in range(MAX_STEPS):
+                candidate /= 10.0
+                if low <= candidate <= high:
+                    break
+                if candidate < low / 10:
+                    break  # undershot, no clean match
+
+        # Only record the level if it landed in the window
+        if low <= candidate <= high:
+            result[planet_name] = [round(candidate, 2)]
 
     return result
 
@@ -1243,31 +1280,34 @@ def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame,
         except Exception:
             pass
 
-    # ── Planetary Price Lines ────────────────────────────────────────────────
-    # Draw gold (Jupiter), red (Mars), and white/silver (Sun) horizontal dashed
-    # lines for each planet whose levels fall within the visible price range.
-    # Each line is individually guarded so a bad level never crashes the chart.
+    # ── Planetary Price Lines (PPL) ──────────────────────────────────────────
+    # Only drawn when planet_lines is non-empty (caller controls via checkbox).
+    # Jupiter = Gold dashed line  |  Saturn = Silver/white dashed line
+    # Each add_hline is individually guarded so a bad level never crashes chart.
+    _PPL_STYLES: dict[str, tuple[str, str, str]] = {
+        # planet_name: (line_colour, label_symbol, label_suffix)
+        "Jupiter": ("#FFD700", "♃", "Jupiter (PPL)"),
+        "Saturn":  ("#e2e8f0", "♄", "Saturn (PPL)"),
+    }
     if planet_lines:
         for planet_name, levels in planet_lines.items():
-            colour = _PPL_PLANET_COLOURS.get(planet_name, "#94a3b8")
-            # Use a thinner, more transparent line so PPL don't overpower price
-            lw = 1.2 if planet_name in ("Jupiter", "Mars", "Sun") else 0.9
+            style = _PPL_STYLES.get(planet_name)
+            if style is None:
+                continue
+            colour, symbol, label_text = style
             for level in levels:
                 try:
                     fig.add_hline(
                         y=level,
                         line_color=colour,
-                        line_dash="dashdot",
-                        line_width=lw,
-                        opacity=0.55,
-                        annotation_text=f"♃ {planet_name} ${level:,.1f}"
-                                        if planet_name == "Jupiter"
-                                        else f"♂ {planet_name} ${level:,.1f}"
-                                        if planet_name == "Mars"
-                                        else f"☀ {planet_name} ${level:,.1f}",
-                        annotation_position="left",
+                        line_dash="dash",
+                        line_width=1.6,
+                        opacity=0.75,
+                        layer="above traces",   # drawn on top of candlesticks
+                        annotation_text=f"{symbol} {label_text}  ${level:,.2f}",
+                        annotation_position="right",
                         annotation_font_color=colour,
-                        annotation_font_size=9,
+                        annotation_font_size=10,
                     )
                 except Exception:
                     pass
@@ -1654,7 +1694,7 @@ def render_screener(signals: list[EntrySignal], class_label: str) -> None:
 
 def main() -> None:
     # 1. Sidebar (first widget call — required by Streamlit)
-    sel = render_sidebar()
+    sel, show_ppl = render_sidebar()
 
     # 2. Header
     render_header(sel)
@@ -1702,38 +1742,27 @@ def main() -> None:
             render_metrics(sig)
 
             # ── Middle section: responsive two-column grid ───────────────────
-            # We use a CSS Grid div rather than st.columns() so that the layout
-            # truly responds to the viewport width.  The `auto-fit` column rule
-            # ensures the chart and astro panel each take a minimum of 480px;
-            # when the viewport cannot fit two such columns they stack vertically.
-            st.markdown(
-                "<div class='av-mid-grid'>",
-                unsafe_allow_html=True,
-            )
+            st.markdown("<div class='av-mid-grid'>", unsafe_allow_html=True)
 
             # Left cell — chart + Gann box
-            st.markdown(
-                "<div class='av-mid-left'>",
-                unsafe_allow_html=True,
-            )
-            # Compute Planetary Price Levels for this ticker's current price
+            st.markdown("<div class='av-mid-left'>", unsafe_allow_html=True)
+
+            # Compute PPL only when the sidebar checkbox is on
             planet_lines: dict[str, list[float]] = {}
-            if report is not None:
+            if show_ppl and report is not None:
                 try:
                     planet_lines = calculate_planetary_price_levels(
                         report.planet_positions, sig.price
                     )
                 except Exception:
                     pass
+
             render_chart(ticker, sig, df, planet_lines=planet_lines)
             render_gann_box(sig)
             st.markdown("</div>", unsafe_allow_html=True)
 
             # Right cell — astro panel
-            st.markdown(
-                "<div class='av-mid-right'>",
-                unsafe_allow_html=True,
-            )
+            st.markdown("<div class='av-mid-right'>", unsafe_allow_html=True)
             if report is not None:
                 render_astro_panel(report)
             else:
