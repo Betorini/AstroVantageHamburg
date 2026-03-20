@@ -180,7 +180,23 @@ html, body,
     padding-left: max(0.5rem, 1vw) !important;
     padding-right: max(0.5rem, 1vw) !important;
 }
-[data-testid="stHeader"], footer, #MainMenu { display: none !important; }
+/* ── stHeader: keep the container VISIBLE so the sidebar toggle survives ── */
+/* Hiding [data-testid="stHeader"] also hides collapsedControl (the > button) */
+/* which lives inside it in Streamlit ≥ 1.28 — that is exactly the iPad bug. */
+/* Instead we hide only the specific children we don't want.                  */
+[data-testid="stDecoration"]  { display: none !important; }
+[data-testid="stToolbar"]     { display: none !important; }
+#MainMenu                     { display: none !important; }
+footer                        { display: none !important; }
+
+/* Explicitly keep the collapse/expand toggle always visible and above everything */
+[data-testid="collapsedControl"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 999999 !important;
+}
 
 /* ── 3. Sidebar ──────────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
