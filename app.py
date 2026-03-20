@@ -1,11 +1,26 @@
 """
-app.py
-------
-AstroVantage — Streamlit Dashboard
-Bright-Gold / Charcoal theme combining CAN SLIM technical screening
-with Uranian Hamburg School financial astrology.
+app.py  —  AstroVantage  (fully responsive edition)
+----------------------------------------------------
+Gold / Charcoal theme · CAN SLIM · Uranian Hamburg-School astrology
 
-Run: streamlit run app.py
+Responsive strategy
+-------------------
+Streamlit's st.columns() is purely server-side and cannot react to the
+browser's viewport width at paint time.  The reliable cross-device solution
+is to render the "two-column" sections as a *single* Streamlit column that
+contains a self-stacking CSS Grid / Flexbox layout injected via
+st.markdown(unsafe_allow_html=True).
+
+Key techniques used:
+  • clamp() on all font sizes      — scales smoothly between viewport widths
+  • CSS Grid with auto-fit         — chart+astro stack automatically ≤ 820 px
+  • overflow-x: auto on table      — screener scrolls horizontally on mobile
+  • JS ResizeObserver              — adds a '.mobile' class to the root so
+                                     pure-CSS mobile overrides also work
+  • @media (max-width: 820px)      — belt-and-suspenders for devices where JS
+                                     is delayed
+
+Run:  streamlit run app.py
 """
 
 from __future__ import annotations
@@ -24,69 +39,40 @@ from core.screener import (
     calculate_risk_parameters,
     screen_all,
 )
-from utils.fetcher import (
-    fetch_ohlcv,
-    get_volume_ratio,
-)
+from utils.fetcher import fetch_ohlcv
 
 load_dotenv()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Asset Universe  (app-level — self-contained, no fetcher dependency for layout)
+# Asset universe
 # ─────────────────────────────────────────────────────────────────────────────
 
 APP_UNIVERSE: dict[str, list[str]] = {
-    "MAG7": [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA",
-    ],
-    "CRYPTO": [
-        "BTC-USD", "ETH-USD", "SOL-USD",
-    ],
-    "COMMODITIES": [
-        "GC=F",    # Gold
-        "SI=F",    # Silver
-        "CL=F",    # Crude Oil
-    ],
+    "MAG7":        ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA"],
+    "CRYPTO":      ["BTC-USD", "ETH-USD", "SOL-USD"],
+    "COMMODITIES": ["GC=F", "SI=F", "CL=F"],
 }
 
 CLASS_META: dict[str, dict] = {
-    "MAG7": {
-        "label": "Magnificent Seven",
-        "icon": "🏆",
-        "accent": "#FFD700",
-        "description": "Large-cap AI & tech leaders",
-    },
-    "CRYPTO": {
-        "label": "Cryptocurrencies",
-        "icon": "₿",
-        "accent": "#34d399",
-        "description": "BTC · ETH · SOL",
-    },
-    "COMMODITIES": {
-        "label": "Commodities",
-        "icon": "🪙",
-        "accent": "#fb923c",
-        "description": "Gold · Silver · Crude Oil",
-    },
+    "MAG7":        {"label": "Magnificent Seven", "icon": "🏆", "accent": "#FFD700",
+                    "description": "Large-cap AI & tech leaders"},
+    "CRYPTO":      {"label": "Cryptocurrencies",  "icon": "₿",  "accent": "#34d399",
+                    "description": "BTC · ETH · SOL"},
+    "COMMODITIES": {"label": "Commodities",        "icon": "🪙", "accent": "#fb923c",
+                    "description": "Gold · Silver · Crude Oil"},
 }
 
-TICKER_LABELS: dict[str, str] = {
-    "GC=F":    "Gold",
-    "SI=F":    "Silver",
-    "CL=F":    "Crude Oil",
-    "BTC-USD": "BTC",
-    "ETH-USD": "ETH",
-    "SOL-USD": "SOL",
+_TICKER_LABELS: dict[str, str] = {
+    "GC=F":    "Gold",      "SI=F":    "Silver",
+    "CL=F":    "Crude Oil", "BTC-USD": "BTC",
+    "ETH-USD": "ETH",       "SOL-USD": "SOL",
 }
 
-
-def ticker_label(t: str) -> str:
-    """Return a human-friendly display name for a raw yfinance ticker."""
-    return TICKER_LABELS.get(t, t)
-
+def tlabel(t: str) -> str:
+    return _TICKER_LABELS.get(t, t)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Page config  (must be the first Streamlit call in the file)
+# Page config  (must precede all st.* calls)
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -97,98 +83,111 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Global CSS — Bright Gold / Charcoal theme
+# Global CSS  — Gold / Charcoal, clamp() typography, responsive grid
 # ─────────────────────────────────────────────────────────────────────────────
 
-st.markdown(
-    """
+st.markdown("""
 <style>
+/* ── 1. Design tokens ────────────────────────────────────────────────────── */
 :root {
-    --bg-main:      #16181c;
-    --bg-card:      #1e2028;
-    --bg-sidebar:   #12141a;
-    --bg-alt:       #1a1c22;
-    --gold:         #FFD700;
-    --gold-dim:     #b8a000;
-    --gold-muted:   #5a4e00;
-    --green:        #22c55e;
-    --red:          #ef4444;
-    --blue:         #38bdf8;
-    --orange:       #fb923c;
-    --purple:       #a78bfa;
-    --text-hi:      #f1f5f9;
-    --text-lo:      #94a3b8;
-    --border:       #2d3148;
+    --bg:         #16181c;
+    --bg-card:    #1e2028;
+    --bg-sidebar: #12141a;
+    --bg-alt:     #1a1c22;
+    --gold:       #FFD700;
+    --gold-dim:   #b8a000;
+    --gold-muted: #5a4e00;
+    --green:      #22c55e;
+    --red:        #ef4444;
+    --blue:       #38bdf8;
+    --orange:     #fb923c;
+    --purple:     #a78bfa;
+    --hi:         #f1f5f9;
+    --lo:         #94a3b8;
+    --border:     #2d3148;
+    --radius:     12px;
 }
 
+/* ── 2. Global dark background ───────────────────────────────────────────── */
 html, body,
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"],
 .main .block-container {
-    background-color: var(--bg-main) !important;
-    color: var(--text-hi) !important;
-    font-family: 'Inter', 'SF Pro Display', system-ui, sans-serif;
+    background: var(--bg) !important;
+    color: var(--hi) !important;
+    font-family: 'Inter', system-ui, sans-serif;
+    /* Remove default side padding on very small viewports */
+    padding-left: max(0.5rem, 1vw) !important;
+    padding-right: max(0.5rem, 1vw) !important;
 }
+[data-testid="stHeader"], footer, #MainMenu { display: none !important; }
 
-[data-testid="stHeader"], footer, #MainMenu { display:none !important; }
-
-/* Sidebar */
+/* ── 3. Sidebar ──────────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
-    background-color: var(--bg-sidebar) !important;
+    background: var(--bg-sidebar) !important;
     border-right: 1px solid var(--border);
+    padding: 0 0.5rem;
 }
-[data-testid="stSidebar"] * { color: var(--text-hi) !important; }
+[data-testid="stSidebar"] * { color: var(--hi) !important; }
 [data-testid="stSidebar"] .stSelectbox > div > div {
     background: var(--bg-card) !important;
     border: 1px solid var(--border) !important;
     border-radius: 8px !important;
+    color: var(--hi) !important;
 }
 [data-testid="stSidebar"] label {
     color: var(--gold) !important;
-    font-size: 0.7rem !important;
-    font-weight: 700 !important;
+    font-size: 0.68rem !important;
+    font-weight: 800 !important;
     letter-spacing: 0.1em !important;
     text-transform: uppercase !important;
 }
 
-/* Buttons */
+/* ── 4. Buttons ──────────────────────────────────────────────────────────── */
 .stButton > button {
     background: linear-gradient(135deg, #7c5c00, #FFD700) !important;
     color: #16181c !important;
     border: none !important;
     border-radius: 8px !important;
-    font-weight: 700 !important;
-    font-size: 0.84rem !important;
-    letter-spacing: 0.04em !important;
-    padding: 10px 20px !important;
+    font-weight: 800 !important;
+    /* clamp: shrinks on small screens */
+    font-size: clamp(0.72rem, 2vw, 0.88rem) !important;
+    padding: 0.6rem 1.2rem !important;
     transition: opacity 0.15s;
+    width: 100%;
 }
-.stButton > button:hover { opacity: 0.85; }
+.stButton > button:hover { opacity: 0.82; }
 
-/* Metric cards */
+/* ── 5. Metric cards ─────────────────────────────────────────────────────── */
 [data-testid="metric-container"] {
     background: var(--bg-card) !important;
     border: 1px solid var(--border) !important;
-    border-radius: 12px !important;
-    padding: 18px 20px !important;
+    border-radius: var(--radius) !important;
+    padding: clamp(10px, 2vw, 18px) clamp(12px, 2.5vw, 20px) !important;
+    min-width: 0 !important;       /* critical: prevents overflow in tight grids */
+    word-break: break-word;
 }
 [data-testid="stMetricValue"] {
     color: var(--gold) !important;
-    font-size: 1.6rem !important;
+    /* clamp: 1.1rem on phone → 1.7rem on desktop */
+    font-size: clamp(1.1rem, 3.5vw, 1.7rem) !important;
     font-weight: 700 !important;
+    white-space: nowrap;
 }
 [data-testid="stMetricLabel"] {
-    color: var(--text-lo) !important;
-    font-size: 0.68rem !important;
-    letter-spacing: 0.1em !important;
+    color: var(--lo) !important;
+    font-size: clamp(0.58rem, 1.5vw, 0.72rem) !important;
+    letter-spacing: 0.08em !important;
     text-transform: uppercase !important;
 }
-[data-testid="stMetricDelta"] { font-size: 0.78rem !important; }
+[data-testid="stMetricDelta"] {
+    font-size: clamp(0.62rem, 1.5vw, 0.78rem) !important;
+}
 
-/* Tabs */
+/* ── 6. Tabs ─────────────────────────────────────────────────────────────── */
 [data-testid="stTabs"] button {
-    color: var(--text-lo) !important;
-    font-size: 0.8rem !important;
+    color: var(--lo) !important;
+    font-size: clamp(0.7rem, 1.8vw, 0.84rem) !important;
     font-weight: 500 !important;
     border-radius: 6px 6px 0 0 !important;
 }
@@ -198,42 +197,62 @@ html, body,
     background: var(--bg-card) !important;
 }
 
-/* Expanders */
+/* ── 7. Expanders ────────────────────────────────────────────────────────── */
 [data-testid="stExpander"] {
     background: var(--bg-card) !important;
     border: 1px solid var(--border) !important;
     border-radius: 10px !important;
 }
-[data-testid="stExpander"] summary { color: var(--gold) !important; font-weight:600 !important; }
+[data-testid="stExpander"] summary {
+    color: var(--gold) !important;
+    font-weight: 600 !important;
+    font-size: clamp(0.78rem, 2vw, 0.9rem) !important;
+}
 
+/* ── 8. Dividers ─────────────────────────────────────────────────────────── */
 hr { border-color: var(--border) !important; margin: 1rem 0; }
 
-/* Section heading */
+/* ── 9. Section headings ─────────────────────────────────────────────────── */
 .av-head {
-    font-size: 0.66rem; font-weight: 800; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--gold);
+    font-size: clamp(0.6rem, 1.5vw, 0.7rem);
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold);
     border-bottom: 1px solid var(--gold-muted);
-    padding-bottom: 5px; margin: 20px 0 12px 0;
+    padding-bottom: 5px;
+    margin: 18px 0 10px;
 }
 
-/* Cards */
+/* ── 10. Generic cards ───────────────────────────────────────────────────── */
 .av-card {
-    background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: 12px; padding: 16px 20px; margin-bottom: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: clamp(12px, 2vw, 18px) clamp(14px, 2.5vw, 22px);
+    margin-bottom: 10px;
+    overflow: hidden;
 }
 .av-card-gold {
-    background: var(--bg-card); border: 1px solid var(--gold-muted);
-    border-radius: 12px; padding: 16px 20px; margin-bottom: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--gold-muted);
+    border-radius: var(--radius);
+    padding: clamp(12px, 2vw, 18px) clamp(14px, 2.5vw, 22px);
+    margin-bottom: 10px;
 }
-.av-bull { background:#0a1f0e; border:1px solid #166534; border-radius:12px; padding:14px 18px; margin-bottom:8px; }
-.av-bear { background:#1f0a0a; border:1px solid #7f1d1d; border-radius:12px; padding:14px 18px; margin-bottom:8px; }
-.av-warn { background:#1f150a; border:1px solid #854d0e; border-radius:12px; padding:14px 18px; margin-bottom:8px; }
-.av-info { background:#0a0f1e; border:1px solid #1e40af; border-radius:12px; padding:14px 18px; margin-bottom:8px; }
+.av-bull { background:#0a1f0e; border:1px solid #166534; border-radius:var(--radius); padding:12px 16px; margin-bottom:8px; }
+.av-info { background:#0a0f1e; border:1px solid #1e40af; border-radius:var(--radius); padding:12px 16px; margin-bottom:8px; }
 
-/* Signal pills */
+/* ── 11. Signal pills ────────────────────────────────────────────────────── */
 .pill {
-    display:inline-block; padding:3px 11px; border-radius:20px;
-    font-size:0.7rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase;
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: clamp(0.62rem, 1.4vw, 0.72rem);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
 }
 .pill-strong-buy  { background:#166534; color:#4ade80; }
 .pill-buy         { background:#14532d; color:#86efac; }
@@ -241,64 +260,230 @@ hr { border-color: var(--border) !important; margin: 1rem 0; }
 .pill-sell        { background:#7f1d1d; color:#fca5a5; }
 .pill-strong-sell { background:#991b1b; color:#fecaca; }
 
-/* Grandpa Bear quote */
+/* ── 12. Grandpa Bear quote ──────────────────────────────────────────────── */
 .gb-quote {
-    font-style:italic; color:var(--gold); font-size:0.8rem; line-height:1.5;
-    border-left:3px solid var(--gold-muted); padding-left:12px; margin:8px 0;
+    font-style: italic;
+    color: var(--gold);
+    font-size: clamp(0.72rem, 1.8vw, 0.82rem);
+    line-height: 1.5;
+    border-left: 3px solid var(--gold-muted);
+    padding-left: 12px;
+    margin: 8px 0 0;
 }
 
-/* Planet row */
+/* ── 13. Planet position rows ────────────────────────────────────────────── */
 .prow {
-    display:flex; justify-content:space-between; padding:5px 0;
-    border-bottom:1px solid var(--border); font-size:0.78rem;
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: clamp(0.7rem, 1.6vw, 0.8rem);
 }
 
-/* Gann row */
+/* ── 14. Gann entry rows ─────────────────────────────────────────────────── */
 .grow {
-    display:flex; justify-content:space-between; align-items:center;
-    padding:6px 0; border-bottom:1px solid var(--border); font-size:0.84rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: clamp(0.75rem, 1.8vw, 0.86rem);
+    gap: 8px;
 }
+.grow span:last-child { text-align: right; }
 
-/* Screener grid (7 columns) */
-.sc-grid {
-    display:grid;
-    grid-template-columns: 1.1fr 1fr 0.8fr 1.2fr 0.9fr 0.9fr 1.1fr;
-    gap:6px; align-items:center;
-}
-.sc-head {
-    font-size:0.66rem; font-weight:800; letter-spacing:0.08em;
-    text-transform:uppercase; color:var(--gold);
-    border-bottom:1px solid var(--gold-muted);
-    padding:0 0 6px 0; margin-bottom:4px;
-}
-.sc-row {
-    font-size:0.82rem; padding:7px 0;
-    border-bottom:1px solid var(--border);
-}
-.sc-row:hover { background:var(--bg-alt); }
-
-/* Sidebar chips */
-.sb-chip {
-    display:inline-block; background:var(--bg-card);
-    border:1px solid var(--border); border-radius:6px;
-    padding:2px 8px; font-size:0.7rem; color:var(--text-lo);
-    margin:2px 3px; font-family:monospace;
-}
-
-/* Astro formula card */
+/* ── 15. Astro formula cards ─────────────────────────────────────────────── */
 .af-card {
-    background:#1a1520; border:1px solid #3d2e5a;
-    border-radius:10px; padding:12px 16px; margin-bottom:8px;
+    background: #1a1520;
+    border: 1px solid #3d2e5a;
+    border-radius: 10px;
+    padding: clamp(10px, 2vw, 14px) clamp(12px, 2.5vw, 18px);
+    margin-bottom: 8px;
+    break-inside: avoid;
 }
-.af-card-active { border-color:var(--purple); background:#1a1028; }
+.af-card-active { border-color: var(--purple); background: #1a1028; }
 .af-label {
-    font-size:0.65rem; font-weight:800; letter-spacing:0.12em;
-    text-transform:uppercase; color:var(--purple); margin-bottom:6px;
+    font-size: clamp(0.58rem, 1.4vw, 0.66rem);
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--purple);
+    margin-bottom: 5px;
+}
+.af-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 5px;
+}
+.af-name  { color: #e2e8f0; font-size: clamp(0.72rem, 1.8vw, 0.82rem); font-weight: 600; }
+.af-status { font-size: clamp(0.62rem, 1.5vw, 0.72rem); font-weight: 700; }
+.af-planets { color: #64748b; font-size: clamp(0.64rem, 1.5vw, 0.74rem); margin-bottom: 6px; }
+.af-interp  { color: #c4b5fd; font-size: clamp(0.7rem, 1.7vw, 0.8rem); line-height: 1.4; margin-bottom: 6px; }
+
+/* ── 16. Responsive two-column grid (chart | astro) ─────────────────────── */
+/*
+   auto-fit with a 480px minimum means:
+     ≥ 820 px viewport  →  two columns side by side
+     < 820 px viewport  →  single column, stacked vertically
+   No JavaScript required for this core behaviour.
+*/
+.av-mid-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+    gap: 1rem;
+    align-items: start;
+    width: 100%;
+}
+.av-mid-left  { min-width: 0; }
+.av-mid-right { min-width: 0; }
+
+/* ── 17. Responsive metric row ───────────────────────────────────────────── */
+/*
+   Four metric cards wrap to 2×2 on mobile, stay 4-across on desktop.
+   Streamlit's own st.columns() is used for desktop; this rule only matters
+   when the viewport shrinks far enough to overflow st.columns().
+*/
+@media (max-width: 640px) {
+    [data-testid="stHorizontalBlock"] > div {
+        min-width: 46% !important;
+        flex-wrap: wrap !important;
+    }
+}
+
+/* ── 18. Screener table — scrollable on small screens ────────────────────── */
+.sc-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    margin-top: 6px;
+}
+.sc-table {
+    width: 100%;
+    min-width: 560px;          /* triggers horizontal scroll below 560px */
+    border-collapse: collapse;
+}
+.sc-table th {
+    background: var(--bg-alt);
+    color: var(--gold);
+    font-size: clamp(0.58rem, 1.3vw, 0.68rem);
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 9px 12px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--gold-muted);
+}
+.sc-table td {
+    padding: 8px 12px;
+    font-size: clamp(0.72rem, 1.6vw, 0.82rem);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.sc-table tr:hover td { background: var(--bg-alt); }
+
+/* ── 19. Sidebar ticker chips ────────────────────────────────────────────── */
+.sb-chip {
+    display: inline-block;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: clamp(0.64rem, 1.5vw, 0.72rem);
+    color: var(--lo);
+    margin: 2px 3px;
+    font-family: monospace;
+}
+
+/* ── 20. Signal card in metrics (4th column) ─────────────────────────────── */
+.sig-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: clamp(10px, 2vw, 18px) clamp(12px, 2.5vw, 20px);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.sig-card-label {
+    font-size: clamp(0.58rem, 1.4vw, 0.68rem);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--lo);
+    margin-bottom: 8px;
 }
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
+
+# Inject a JS ResizeObserver so an additional `.mobile` class is toggled on
+# the document root — this enables any CSS `.mobile` overrides to fire
+# the instant the viewport changes (e.g. rotating an iPad).
+st.markdown("""
+<script>
+(function () {
+    function applyMobile() {
+        if (window.innerWidth < 820) {
+            document.documentElement.classList.add('mobile');
+        } else {
+            document.documentElement.classList.remove('mobile');
+        }
+    }
+    applyMobile();
+    window.addEventListener('resize', applyMobile);
+})();
+</script>
+""", unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Safe data helpers  —  try/except guards prevent the "Black Screen of Death"
+# ─────────────────────────────────────────────────────────────────────────────
+
+def safe_fetch(ticker: str, period: str = "6mo") -> pd.DataFrame:
+    """
+    Fetch OHLCV via yfinance.  Returns an empty DataFrame on ANY error so the
+    rest of the dashboard continues rendering even if one ticker is broken.
+    """
+    try:
+        df = fetch_ohlcv(ticker, period=period, interval="1d")
+        if df is None or df.empty:
+            return pd.DataFrame()
+        # Normalise index: strip tz-awareness so Plotly arithmetic works
+        if hasattr(df.index, "tz") and df.index.tz is not None:
+            df = df.copy()
+            df.index = df.index.tz_localize(None)
+        df.index = pd.to_datetime(df.index)
+        return df
+    except Exception as exc:
+        st.warning(
+            f"⚠️ **{tlabel(ticker)}** — data unavailable (`{type(exc).__name__}`). "
+            "Skipping.",
+            icon="⚠️",
+        )
+        return pd.DataFrame()
+
+
+def safe_analyze(ticker: str, df: pd.DataFrame) -> Optional[EntrySignal]:
+    """Run the screener pipeline; return None on any exception."""
+    try:
+        return analyze_ticker(ticker, df)
+    except Exception:
+        return None
+
+
+def safe_astro_report() -> Optional[DailyAstroReport]:
+    """Compute the daily astrological report; return None on failure."""
+    try:
+        return generate_daily_report()
+    except Exception:
+        return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -306,86 +491,74 @@ hr { border-color: var(--border) !important; margin: 1rem 0; }
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_sidebar() -> str:
-    """Render the sidebar and return the selected asset class key."""
+    """Render the sidebar and return the selected asset-class key."""
     with st.sidebar:
         st.markdown(
-            """
-            <div style="text-align:center;padding:16px 0 20px;">
-              <div style="font-size:2rem;">🔭</div>
-              <div style="font-size:1.15rem;font-weight:800;color:#FFD700;
-                          letter-spacing:-0.01em;">AstroVantage</div>
-              <div style="font-size:0.62rem;color:#5a6474;
-                          letter-spacing:0.1em;margin-top:3px;">
-                CANSLIM · URANIAN ASTROLOGY
-              </div>
-            </div>
-            """,
+            '<div style="text-align:center;padding:16px 0 20px;">'
+            '<div style="font-size:clamp(1.6rem,4vw,2rem);">🔭</div>'
+            '<div style="font-size:clamp(1rem,3vw,1.2rem);font-weight:800;color:#FFD700;">'
+            "AstroVantage</div>"
+            '<div style="font-size:clamp(0.56rem,1.3vw,0.65rem);color:#5a6474;'
+            'letter-spacing:0.1em;margin-top:3px;">CANSLIM · URANIAN ASTROLOGY</div>'
+            "</div>",
             unsafe_allow_html=True,
         )
 
-        # Asset class selector
+        # ── Asset class selectbox ────────────────────────────────────────────
         st.markdown(
             '<div style="font-size:0.66rem;font-weight:800;letter-spacing:0.1em;'
-            'text-transform:uppercase;color:#FFD700;margin-bottom:6px;">'
-            "Asset Class</div>",
+            'text-transform:uppercase;color:#FFD700;margin-bottom:6px;">Asset Class</div>',
             unsafe_allow_html=True,
         )
-        class_keys = list(APP_UNIVERSE.keys())
-        class_display = [
-            f"{CLASS_META[k]['icon']}  {CLASS_META[k]['label']}"
-            for k in class_keys
-        ]
+        keys = list(APP_UNIVERSE.keys())
+        labels = [f"{CLASS_META[k]['icon']}  {CLASS_META[k]['label']}" for k in keys]
         idx: int = st.selectbox(
-            label="ac_select",
-            options=range(len(class_keys)),
-            format_func=lambda i: class_display[i],
-            index=0,
-            label_visibility="collapsed",
+            "ac", options=range(len(keys)),
+            format_func=lambda i: labels[i],
+            index=0, label_visibility="collapsed",
         )
-        sel: str = class_keys[idx]
+        sel: str = keys[idx]
         meta = CLASS_META[sel]
 
         st.markdown(
-            f'<div style="font-size:0.76rem;color:{meta["accent"]};'
+            f'<div style="font-size:0.74rem;color:{meta["accent"]};'
             f'margin:4px 0 10px;">{meta["description"]}</div>',
             unsafe_allow_html=True,
         )
 
         chips = "".join(
-            f'<span class="sb-chip">{ticker_label(t)}</span>'
+            f'<span class="sb-chip">{tlabel(t)}</span>'
             for t in APP_UNIVERSE[sel]
         )
         st.markdown(
-            f'<div style="line-height:2.2;margin-bottom:14px;">{chips}</div>',
+            f'<div style="line-height:2.4;margin-bottom:14px;">{chips}</div>',
             unsafe_allow_html=True,
         )
 
-        # Manual Refresh button
-        st.markdown("<div style='margin-top:6px;'></div>", unsafe_allow_html=True)
+        # ── Manual Refresh ───────────────────────────────────────────────────
         if st.button("🔄  Manual Refresh", use_container_width=True):
-            for key in ("screener_signals", "_last_class", "astro_report"):
-                st.session_state.pop(key, None)
+            for k in ("screener_signals", "_last_class", "astro_report"):
+                st.session_state.pop(k, None)
             st.cache_data.clear()
             st.rerun()
 
-        # Astro status strip
+        # ── Astro status strip ───────────────────────────────────────────────
         st.markdown("<hr>", unsafe_allow_html=True)
         st.markdown(
-            """
-            <div style="font-size:0.76rem;line-height:2.1;color:#94a3b8;">
-              ☀️ <span style="color:#FFD700;font-weight:700;">Aries Ingress</span>
-                 — Mar 20 2026<br>
-              ☿ <span style="color:#34d399;font-weight:700;">Mercury Direct</span>
-                 — tech clarity<br>
-              ⚡ <span style="color:#a78bfa;font-weight:700;">JU = SU/UR</span>
-                 — formula live
-            </div>
-            """,
+            '<div style="font-size:clamp(0.68rem,1.6vw,0.78rem);line-height:2.1;'
+            'color:#94a3b8;">'
+            '☀️ <span style="color:#FFD700;font-weight:700;">Aries Ingress</span>'
+            " — Mar 20 2026<br>"
+            '☿ <span style="color:#34d399;font-weight:700;">Mercury Direct</span>'
+            " — tech clarity<br>"
+            '⚡ <span style="color:#a78bfa;font-weight:700;">JU = SU/UR</span>'
+            " — formula live"
+            "</div>",
             unsafe_allow_html=True,
         )
         st.markdown(
-            "<div style='margin-top:18px;font-size:0.6rem;color:#334155;"
-            "text-align:center;'>Educational use only. Not financial advice.</div>",
+            '<div style="margin-top:18px;font-size:0.6rem;color:#334155;'
+            'text-align:center;">Educational use only. Not financial advice.</div>',
             unsafe_allow_html=True,
         )
 
@@ -399,42 +572,37 @@ def render_sidebar() -> str:
 def render_header(sel: str) -> None:
     meta = CLASS_META.get(sel, CLASS_META["MAG7"])
     col_l, col_r = st.columns([3, 1])
+
     with col_l:
         st.markdown(
-            f"""
-            <div style="display:flex;align-items:center;gap:14px;padding:6px 0 4px;">
-              <div style="font-size:2.4rem;">🔭</div>
-              <div>
-                <h1 style="margin:0;font-size:2rem;font-weight:800;
-                            color:#FFD700;letter-spacing:-0.02em;">
-                  AstroVantage
-                </h1>
-                <p style="margin:0;color:#5a6474;font-size:0.76rem;
-                           letter-spacing:0.06em;">
-                  {meta["icon"]} {meta["label"].upper()}
-                  &nbsp;·&nbsp; CANSLIM + URANIAN ASTROLOGY
-                </p>
-              </div>
-            </div>
-            """,
+            '<div style="display:flex;align-items:center;gap:14px;padding:6px 0 4px;">'
+            '<div style="font-size:clamp(1.8rem,4vw,2.4rem);">🔭</div>'
+            "<div>"
+            '<h1 style="margin:0;font-size:clamp(1.4rem,4vw,2rem);font-weight:800;'
+            'color:#FFD700;letter-spacing:-0.02em;">AstroVantage</h1>'
+            f'<p style="margin:0;color:#5a6474;'
+            f'font-size:clamp(0.62rem,1.5vw,0.78rem);letter-spacing:0.06em;">'
+            f'{meta["icon"]} {meta["label"].upper()}'
+            " &nbsp;·&nbsp; CANSLIM + URANIAN ASTROLOGY</p>"
+            "</div>"
+            "</div>",
             unsafe_allow_html=True,
         )
+
     with col_r:
         st.markdown(
-            """
-            <div style="text-align:right;padding-top:10px;
-                        font-size:0.74rem;line-height:1.9;">
-              <div style="color:#FFD700;font-weight:700;">☀️ ARIES INGRESS</div>
-              <div style="color:#94a3b8;">March 20, 2026</div>
-              <div style="color:#34d399;font-weight:600;">☿ Mercury Direct</div>
-            </div>
-            """,
+            '<div style="text-align:right;padding-top:10px;'
+            'font-size:clamp(0.62rem,1.5vw,0.76rem);line-height:1.9;">'
+            '<div style="color:#FFD700;font-weight:700;">☀️ ARIES INGRESS</div>'
+            '<div style="color:#94a3b8;">March 20, 2026</div>'
+            '<div style="color:#34d399;font-weight:600;">☿ Mercury Direct</div>'
+            "</div>",
             unsafe_allow_html=True,
         )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Metric Cards (4 columns)
+# Metric cards  (4 columns; wrap to 2 × 2 on ≤ 640 px via Streamlit columns)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_metrics(sig: EntrySignal) -> None:
@@ -454,24 +622,18 @@ def render_metrics(sig: EntrySignal) -> None:
 
     with c3:
         vol_note = "Heavy 🔥" if sig.volume_ratio >= 1.5 else "Normal"
-        st.metric("Volume Ratio", f"{sig.volume_ratio:.2f}x", delta=vol_note)
+        st.metric("Vol Ratio", f"{sig.volume_ratio:.2f}x", delta=vol_note)
 
     with c4:
         pill_cls = "pill-" + sig.signal.replace("_", "-")
         sig_label = sig.signal.replace("_", " ").title()
         st.markdown(
-            f"""
-            <div style="background:#1e2028;border:1px solid #2d3148;
-                        border-radius:12px;padding:18px 20px;">
-              <div style="font-size:0.66rem;font-weight:700;letter-spacing:0.1em;
-                          text-transform:uppercase;color:#94a3b8;margin-bottom:8px;">
-                Signal
-              </div>
-              <span class="pill {pill_cls}" style="font-size:0.84rem;padding:5px 16px;">
-                {sig_label}
-              </span>
-            </div>
-            """,
+            f'<div class="sig-card">'
+            f'<div class="sig-card-label">Signal</div>'
+            f'<span class="pill {pill_cls}" '
+            f'style="font-size:clamp(0.72rem,1.8vw,0.84rem);padding:5px 14px;">'
+            f"{sig_label}</span>"
+            f"</div>",
             unsafe_allow_html=True,
         )
 
@@ -482,24 +644,19 @@ def render_metrics(sig: EntrySignal) -> None:
 
 def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame) -> None:
     """
-    Plotly candlestick with EMA overlays, entry-zone shading, stop line,
-    and Aries Ingress marker. All add_vline / add_hline / add_hrect calls
-    are individually guarded with try/except to prevent cosmetic failures
-    from crashing the chart.
+    Interactive Plotly candlestick with EMA overlays, entry-zone shading,
+    stop-loss line, and Aries Ingress marker.
 
-    The x value for add_vline is always a tz-naive pd.Timestamp — never a
-    bare string — to avoid the Plotly TypeError: int + str bug.
+    All add_vline / add_hline / add_hrect calls are individually guarded with
+    try/except — a cosmetic annotation failure never crashes the chart.
+
+    The Aries Ingress x value is always a tz-naive pd.Timestamp (never a bare
+    string) to prevent the Plotly "TypeError: int + str" bug.
     """
     st.markdown(
         '<div class="av-head">Price Action · EMA Overlay</div>',
         unsafe_allow_html=True,
     )
-
-    # Normalise index: strip tz-awareness so Plotly arithmetic works
-    df = df.copy()
-    if hasattr(df.index, "tz") and df.index.tz is not None:
-        df.index = df.index.tz_localize(None)
-    df.index = pd.to_datetime(df.index)
 
     # EMA stack
     ema_stack: dict = {}
@@ -511,59 +668,43 @@ def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame) -> None:
 
     fig = go.Figure()
 
-    # Candlesticks
     fig.add_trace(
         go.Candlestick(
             x=df.index,
-            open=df["Open"],
-            high=df["High"],
-            low=df["Low"],
-            close=df["Close"],
-            name=ticker_label(ticker),
-            increasing_line_color="#22c55e",
-            decreasing_line_color="#ef4444",
-            increasing_fillcolor="#166534",
-            decreasing_fillcolor="#7f1d1d",
+            open=df["Open"], high=df["High"],
+            low=df["Low"],   close=df["Close"],
+            name=tlabel(ticker),
+            increasing_line_color="#22c55e", decreasing_line_color="#ef4444",
+            increasing_fillcolor="#166534",  decreasing_fillcolor="#7f1d1d",
             line_width=1,
         )
     )
 
-    # EMA lines
-    ema_specs = [
+    for key, lbl, colour, dash in [
         ("ema21",  "EMA 21",  "#34d399", "solid"),
         ("ema50",  "EMA 50",  "#FFD700", "dot"),
         ("ema200", "EMA 200", "#ef4444", "dash"),
-    ]
-    for key, lbl, colour, dash in ema_specs:
-        series = ema_stack.get(key, pd.Series(dtype=float)).dropna()
-        if series.empty:
+    ]:
+        s = ema_stack.get(key, pd.Series(dtype=float)).dropna()
+        if s.empty:
             continue
-        s = series.copy()
+        s = s.copy()
         if hasattr(s.index, "tz") and s.index.tz is not None:
             s.index = s.index.tz_localize(None)
         fig.add_trace(
-            go.Scatter(
-                x=s.index,
-                y=s.values,
-                name=lbl,
-                line=dict(color=colour, width=1.4, dash=dash),
-                opacity=0.85,
-            )
+            go.Scatter(x=s.index, y=s.values, name=lbl,
+                       line=dict(color=colour, width=1.4, dash=dash), opacity=0.85)
         )
 
     # Entry zone band
     if sig.entry_low > 0 and sig.entry_high > 0:
         try:
             fig.add_hrect(
-                y0=sig.entry_low,
-                y1=sig.entry_high,
-                fillcolor="rgba(255,215,0,0.07)",
-                line_color="rgba(255,215,0,0.25)",
-                line_width=1,
-                annotation_text="Entry Zone",
-                annotation_position="right",
-                annotation_font_color="#FFD700",
-                annotation_font_size=10,
+                y0=sig.entry_low, y1=sig.entry_high,
+                fillcolor="rgba(255,215,0,0.06)",
+                line_color="rgba(255,215,0,0.22)", line_width=1,
+                annotation_text="Entry Zone", annotation_position="right",
+                annotation_font_color="#FFD700", annotation_font_size=10,
             )
         except Exception:
             pass
@@ -573,132 +714,120 @@ def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame) -> None:
         try:
             fig.add_hline(
                 y=sig.stop_loss,
-                line_color="#ef4444",
-                line_dash="dot",
-                line_width=1.5,
+                line_color="#ef4444", line_dash="dot", line_width=1.5,
                 annotation_text=f"Stop  ${sig.stop_loss:,.2f}",
                 annotation_position="right",
-                annotation_font_color="#ef4444",
-                annotation_font_size=10,
+                annotation_font_color="#ef4444", annotation_font_size=10,
             )
         except Exception:
             pass
 
-    # Aries Ingress vertical marker
-    # x MUST be a tz-naive pd.Timestamp — not a string — to avoid the
-    # TypeError: unsupported operand type(s) for +: 'int' and 'str'
-    # that occurs when Plotly tries to compute annotation offsets.
+    # Aries Ingress marker — use pd.Timestamp, NOT a plain string
     try:
-        aries_ts = pd.Timestamp("2026-03-20")       # tz-naive Timestamp
-        df_start = df.index.min()
-        df_end = df.index.max()
-
-        if df_start <= aries_ts <= df_end:
-            marker_ts = aries_ts
-            marker_lbl = "☀️ Aries Ingress"
-        else:
-            # Ingress date outside visible range — anchor to last bar
-            marker_ts = df.index[-1]
-            marker_lbl = "☀️ Aries Ingress (Mar 20)"
-
+        aries_ts = pd.Timestamp("2026-03-20")   # tz-naive Timestamp
+        df_start, df_end = df.index.min(), df.index.max()
+        marker_ts  = aries_ts if df_start <= aries_ts <= df_end else df.index[-1]
+        marker_txt = "☀️ Aries Ingress" if df_start <= aries_ts <= df_end \
+                     else "☀️ Aries Ingress (Mar 20)"
         fig.add_vline(
             x=marker_ts,
-            line_color="#a78bfa",
-            line_dash="dash",
-            line_width=1.5,
-            annotation_text=marker_lbl,
-            annotation_position="top left",
-            annotation_font_color="#a78bfa",
-            annotation_font_size=10,
+            line_color="#a78bfa", line_dash="dash", line_width=1.5,
+            annotation_text=marker_txt, annotation_position="top left",
+            annotation_font_color="#a78bfa", annotation_font_size=10,
         )
     except Exception:
         pass
 
     fig.update_layout(
-        paper_bgcolor="#16181c",
-        plot_bgcolor="#16181c",
-        font_color="#94a3b8",
-        height=420,
-        margin=dict(l=8, r=8, t=28, b=8),
-        xaxis=dict(
-            gridcolor="#1e2028",
-            showgrid=True,
-            rangeslider=dict(visible=False),
-            color="#475569",
-        ),
-        yaxis=dict(
-            gridcolor="#1e2028",
-            showgrid=True,
-            color="#475569",
-            tickprefix="$",
-        ),
-        legend=dict(
-            bgcolor="rgba(0,0,0,0)",
-            font=dict(size=11, color="#64748b"),
-            orientation="h",
-            yanchor="bottom",
-            y=1.01,
-            xanchor="left",
-            x=0,
-        ),
+        paper_bgcolor="#16181c", plot_bgcolor="#16181c", font_color="#94a3b8",
+        height=400,
+        margin=dict(l=6, r=6, t=24, b=6),
+        xaxis=dict(gridcolor="#1e2028", showgrid=True,
+                   rangeslider=dict(visible=False), color="#475569"),
+        yaxis=dict(gridcolor="#1e2028", showgrid=True,
+                   color="#475569", tickprefix="$"),
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10, color="#64748b"),
+                    orientation="h", yanchor="bottom", y=1.01, x=0),
         hovermode="x unified",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Gann Entry Zone Box  (below chart, left column)
+# Gann Entry Zone box  (below chart in left column)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_gann_box(sig: EntrySignal) -> None:
     mid = (sig.entry_low + sig.entry_high) / 2
-    risk = calculate_risk_parameters(
-        entry_price=mid,
-        stop_loss=sig.stop_loss,
-        portfolio_value=100_000.0,
-    )
+    try:
+        risk = calculate_risk_parameters(
+            entry_price=mid, stop_loss=sig.stop_loss, portfolio_value=100_000.0
+        )
+    except Exception:
+        risk = None
 
     rows = [
-        ("Entry Low",        f"${sig.entry_low:,.2f}",                       "#FFD700"),
-        ("Entry High",       f"${sig.entry_high:,.2f}",                      "#FFD700"),
+        ("Entry Low",        f"${sig.entry_low:,.2f}",                              "#FFD700"),
+        ("Entry High",       f"${sig.entry_high:,.2f}",                             "#FFD700"),
         ("Stop Loss",        f"${sig.stop_loss:,.2f}  (−{sig.stop_loss_pct*100:.1f}%)", "#ef4444"),
-        ("Risk / Reward",    f"1 : {risk.risk_reward:.1f}",                  "#22c55e"),
-        ("Shares (1% risk)", str(risk.position_size_shares),                 "#f1f5f9"),
-        ("Position value",   f"${risk.position_size_usd:,.0f}",              "#f1f5f9"),
-        ("Max loss",         f"${risk.max_loss_usd:,.0f}",                   "#ef4444"),
     ]
+    if risk:
+        rows += [
+            ("Risk / Reward",    f"1 : {risk.risk_reward:.1f}",                     "#22c55e"),
+            ("Shares (1% risk)", str(risk.position_size_shares),                    "#f1f5f9"),
+            ("Position value",   f"${risk.position_size_usd:,.0f}",                 "#f1f5f9"),
+            ("Max loss",         f"${risk.max_loss_usd:,.0f}",                      "#ef4444"),
+        ]
 
     rows_html = "".join(
         f'<div class="grow">'
-        f'<span style="color:#94a3b8;">{lbl}</span>'
+        f'<span style="color:#94a3b8;flex:1;">{lbl}</span>'
         f'<span style="color:{col};font-weight:600;">{val}</span>'
         f"</div>"
         for lbl, val, col in rows
     )
 
     st.markdown(
-        f"""
-        <div class="av-card-gold">
-          <div style="font-size:0.66rem;font-weight:800;letter-spacing:0.12em;
-                      text-transform:uppercase;color:#FFD700;margin-bottom:10px;">
-            ⬡ Gann Entry Zone — {ticker_label(sig.ticker)}
-          </div>
-          {rows_html}
-        </div>
-        """,
+        f'<div class="av-card-gold">'
+        f'<div style="font-size:clamp(0.6rem,1.4vw,0.68rem);font-weight:800;'
+        f'letter-spacing:0.12em;text-transform:uppercase;color:#FFD700;'
+        f'margin-bottom:10px;">⬡ Gann Entry Zone — {tlabel(sig.ticker)}</div>'
+        f"{rows_html}"
+        f"</div>",
         unsafe_allow_html=True,
     )
 
     for note in sig.notes:
         st.markdown(
-            f'<div style="color:#94a3b8;font-size:0.8rem;padding:3px 0;">{note}</div>',
+            f'<div style="color:#94a3b8;font-size:clamp(0.7rem,1.6vw,0.8rem);'
+            f'padding:3px 0;">{note}</div>',
             unsafe_allow_html=True,
         )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Uranian / Financial Astrology Panel  (right column)
+# Astro Panel  (right column)  — four formula cards
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _formula_card(code: str, name: str, planets: str,
+                  active: bool, orb: str, interp: str, grandpa: str) -> str:
+    """Return the HTML string for a single formula card."""
+    cls    = "af-card af-card-active" if active else "af-card"
+    sc     = "#a78bfa" if active else "#475569"
+    sl     = f"✅ ACTIVE — Orb {orb}" if active else "⬜ Inactive"
+    return (
+        f'<div class="{cls}">'
+        f'<div class="af-label">{code}</div>'
+        f'<div class="af-header">'
+        f'<span class="af-name">{name}</span>'
+        f'<span class="af-status" style="color:{sc};">{sl}</span>'
+        f"</div>"
+        f'<div class="af-planets">{planets}</div>'
+        f'<div class="af-interp">{interp}</div>'
+        f'<div class="gb-quote">🎩 "{grandpa}"</div>'
+        f"</div>"
+    )
+
 
 def render_astro_panel(report: DailyAstroReport) -> None:
     st.markdown(
@@ -709,151 +838,133 @@ def render_astro_panel(report: DailyAstroReport) -> None:
     # Aries Ingress banner
     if report.aries_ingress:
         st.markdown(
-            """
-            <div class="av-bull">
-              <strong style="color:#4ade80;font-size:0.88rem;">
-                ☀️ ARIES INGRESS — Astrological New Year
-              </strong>
-              <p style="color:#86efac;margin:6px 0 0;font-size:0.8rem;">
-                Sun at 0° Aries — 2026 astrological cycle begins.
-                Jupiter near Uranus in Taurus favours AI &amp; tech
-                infrastructure expansion through year-end.
-              </p>
-            </div>
-            """,
+            '<div class="av-bull">'
+            '<strong style="color:#4ade80;font-size:clamp(0.78rem,2vw,0.9rem);">'
+            "☀️ ARIES INGRESS — Astrological New Year</strong>"
+            '<p style="color:#86efac;margin:6px 0 0;'
+            'font-size:clamp(0.7rem,1.7vw,0.82rem);">'
+            "Sun at 0° Aries — 2026 astrological cycle begins. "
+            "Jupiter near Uranus in Taurus favours AI &amp; tech "
+            "infrastructure expansion through year-end.</p>"
+            "</div>",
             unsafe_allow_html=True,
         )
 
     # Mercury Direct banner
     if report.mercury_direct:
         st.markdown(
-            """
-            <div class="av-info">
-              <strong style="color:#60a5fa;font-size:0.88rem;">
-                ☿ Mercury Station Direct — ~22° Pisces
-              </strong>
-              <p style="color:#93c5fd;margin:6px 0 0;font-size:0.8rem;">
-                Post-retrograde clarity returns to tech &amp; comms.
-                Watch for gap-ups in MSFT, GOOGL, AAPL within 72 h.
-              </p>
-            </div>
-            """,
+            '<div class="av-info">'
+            '<strong style="color:#60a5fa;font-size:clamp(0.78rem,2vw,0.9rem);">'
+            "☿ Mercury Station Direct — ~22° Pisces</strong>"
+            '<p style="color:#93c5fd;margin:6px 0 0;'
+            'font-size:clamp(0.7rem,1.7vw,0.82rem);">'
+            "Post-retrograde clarity returns to tech &amp; comms. "
+            "Watch for gap-ups in MSFT, GOOGL, AAPL within 72 h.</p>"
+            "</div>",
             unsafe_allow_html=True,
         )
 
-    # ── Three formula cards: JU=SU/UR, VE=JU/UR, SA=SU/UR ──────────────────
+    # ── Gather planet longitudes ─────────────────────────────────────────────
     positions = report.planet_positions
 
     def lon(name: str) -> Optional[float]:
         p = positions.get(name)
         return p.longitude if p else None
 
-    sun_l = lon("Sun")
-    ju_l  = lon("Jupiter")
-    ur_l  = lon("Uranus")
-    ve_l  = lon("Venus")
-    sa_l  = lon("Saturn")
+    sun_l = lon("Sun");    ju_l  = lon("Jupiter"); ur_l = lon("Uranus")
+    ve_l  = lon("Venus");  sa_l  = lon("Saturn");  ne_l = lon("Neptune")
+    pl_l  = lon("Pluto")
 
-    # Pull JU=SU/UR result from report
+    # JU = SU/UR from the report's pre-computed active_hits
     ju_hit = next((h for h in report.active_hits if "JU" in h.formula), None)
 
-    formulas = [
+    # Default states for the four formulas
+    formulas: list[dict] = [
         {
-            "code":    "JU = SU/UR",
-            "name":    "Jupiter = Sun / Uranus",
+            "code": "JU = SU/UR", "name": "Jupiter = Sun / Uranus",
             "planets": "☀️ Sun  +  ⚡ Uranus  →  🪐 Jupiter",
-            "active":  bool(ju_hit and ju_hit.is_active),
-            "orb":     f"{ju_hit.orb:.2f}°" if ju_hit else "—",
-            "interp":  (
-                "Sudden tech breakthroughs, euphoric rallies. "
-                "Gap-up opens and momentum surges in AI names."
+            "active": bool(ju_hit and ju_hit.is_active),
+            "orb": f"{ju_hit.orb:.2f}°" if ju_hit else "—",
+            "interp": (
+                "Sudden tech breakthroughs and euphoric rallies. "
+                "Historically correlates with gap-up opens in AI names."
             ),
             "grandpa": (
                 ju_hit.grandpa_bear_quote if ju_hit
-                else "Boy, Jupiter on Uranus is the lottery ticket transit. "
+                else "Boy, Jupiter on Uranus is the lottery transit. "
                      "Wins big — loses bigger. Watch your stops."
             ),
         },
         {
-            "code":    "VE = JU/UR",
-            "name":    "Venus = Jupiter / Uranus",
+            "code": "VE = JU/UR", "name": "Venus = Jupiter / Uranus",
             "planets": "🪐 Jupiter  +  ⚡ Uranus  →  ♀ Venus",
-            "active":  False,
-            "orb":     "—",
-            "interp":  (
-                "Sudden windfall energy. Favours financials, luxury goods, "
-                "and speculative crypto rallies."
-            ),
+            "active": False, "orb": "—",
+            "interp": "Sudden windfall energy. Favours financials, luxury goods, and crypto rallies.",
             "grandpa": (
-                "Venus on Jupiter/Uranus? Son, that's the trade everyone "
-                "wants. Which means half are already in. Be careful."
+                "Venus on Jupiter/Uranus? Son, that's the trade "
+                "everyone wants. Half of 'em are already in. Be careful."
             ),
         },
         {
-            "code":    "SA = SU/UR",
-            "name":    "Saturn = Sun / Uranus",
+            "code": "SA = SU/UR", "name": "Saturn = Sun / Uranus",
             "planets": "☀️ Sun  +  ⚡ Uranus  →  ♄ Saturn",
-            "active":  False,
-            "orb":     "—",
-            "interp":  (
-                "Tech ambitions meet regulatory or economic resistance. "
-                "Structural disruption slowed by reality."
-            ),
+            "active": False, "orb": "—",
+            "interp": "Tech ambitions meet regulatory resistance. Structure disrupted by reality.",
             "grandpa": (
                 "Saturn crashing the Sun/Uranus party means the bill "
                 "arrives. Tighten those stops, son."
             ),
         },
+        {
+            "code": "NE = PL/UR", "name": "Neptune = Pluto / Uranus",
+            "planets": "♇ Pluto  +  ⚡ Uranus  →  ♆ Neptune",
+            "active": False, "orb": "—",
+            "interp": (
+                "Generational dissolution of old power structures. "
+                "Crypto and AI narrative cycles at peak confusion or peak clarity."
+            ),
+            "grandpa": (
+                "Neptune on Pluto/Uranus? Son, that's the kind of transit "
+                "that makes people believe they've invented something new. "
+                "They haven't. It's still tulips."
+            ),
+        },
     ]
 
-    # Compute VE=JU/UR and SA=SU/UR live
+    # Compute VE=JU/UR, SA=SU/UR, NE=PL/UR live
     try:
         from core.astro_logic import calculate_midpoint, is_hard_aspect
 
         if ju_l is not None and ur_l is not None:
             ju_ur_mp = calculate_midpoint(ju_l, ur_l)
             if ve_l is not None:
-                ve_hit, _, ve_orb = is_hard_aspect(ve_l, ju_ur_mp, orb=2.0)
-                formulas[1]["active"] = ve_hit
-                formulas[1]["orb"] = f"{ve_orb:.2f}°" if ve_hit else "—"
+                hit, _, orb_v = is_hard_aspect(ve_l, ju_ur_mp, orb=2.0)
+                formulas[1]["active"] = hit
+                formulas[1]["orb"]    = f"{orb_v:.2f}°" if hit else "—"
 
         if sun_l is not None and ur_l is not None:
             su_ur_mp = calculate_midpoint(sun_l, ur_l)
             if sa_l is not None:
-                sa_hit, _, sa_orb = is_hard_aspect(sa_l, su_ur_mp, orb=2.0)
-                formulas[2]["active"] = sa_hit
-                formulas[2]["orb"] = f"{sa_orb:.2f}°" if sa_hit else "—"
+                hit, _, orb_v = is_hard_aspect(sa_l, su_ur_mp, orb=2.0)
+                formulas[2]["active"] = hit
+                formulas[2]["orb"]    = f"{orb_v:.2f}°" if hit else "—"
+
+        if pl_l is not None and ur_l is not None:
+            pl_ur_mp = calculate_midpoint(pl_l, ur_l)
+            if ne_l is not None:
+                hit, _, orb_v = is_hard_aspect(ne_l, pl_ur_mp, orb=2.0)
+                formulas[3]["active"] = hit
+                formulas[3]["orb"]    = f"{orb_v:.2f}°" if hit else "—"
     except Exception:
-        pass
+        pass  # Non-fatal: formula cards still render with default state
 
+    # Render formula cards
     for f in formulas:
-        card_cls = "af-card af-card-active" if f["active"] else "af-card"
-        sc = "#a78bfa" if f["active"] else "#475569"
-        sl = f"✅ ACTIVE — Orb {f['orb']}" if f["active"] else "⬜ Inactive"
-
         st.markdown(
-            f"""
-            <div class="{card_cls}">
-              <div class="af-label">{f["code"]}</div>
-              <div style="display:flex;justify-content:space-between;
-                          align-items:center;margin-bottom:5px;">
-                <span style="color:#e2e8f0;font-size:0.8rem;font-weight:600;">
-                  {f["name"]}
-                </span>
-                <span style="color:{sc};font-size:0.7rem;font-weight:700;">
-                  {sl}
-                </span>
-              </div>
-              <div style="color:#64748b;font-size:0.72rem;margin-bottom:7px;">
-                {f["planets"]}
-              </div>
-              <div style="color:#c4b5fd;font-size:0.78rem;margin-bottom:7px;
-                          line-height:1.4;">
-                {f["interp"]}
-              </div>
-              <div class="gb-quote">🎩 "{f["grandpa"]}"</div>
-            </div>
-            """,
+            _formula_card(
+                f["code"], f["name"], f["planets"],
+                f["active"], f["orb"], f["interp"], f["grandpa"],
+            ),
             unsafe_allow_html=True,
         )
 
@@ -878,7 +989,7 @@ def render_astro_panel(report: DailyAstroReport) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Full-width Screener Table
+# Screener table  — overflow-x: auto makes it scroll on small screens
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_screener(signals: list[EntrySignal], class_label: str) -> None:
@@ -887,18 +998,21 @@ def render_screener(signals: list[EntrySignal], class_label: str) -> None:
         unsafe_allow_html=True,
     )
 
-    headers = ["Ticker", "Price", "RSI", "EMA Align", "Vol Ratio", "MACD", "Signal"]
-    hcells = "".join(f"<span>{h}</span>" for h in headers)
-    st.markdown(
-        f'<div class="sc-grid sc-head">{hcells}</div>',
-        unsafe_allow_html=True,
+    # Table header
+    thead = (
+        "<thead><tr>"
+        "<th>Ticker</th><th>Price</th><th>RSI</th>"
+        "<th>EMA Align</th><th>Vol Ratio</th><th>MACD</th><th>Signal</th>"
+        "</tr></thead>"
     )
 
+    # Table rows
+    rows_html = ""
     for sig in signals:
         pill_cls = "pill-" + sig.signal.replace("_", "-")
-        sig_txt = sig.signal.replace("_", " ").title()
+        sig_txt  = sig.signal.replace("_", " ").title()
 
-        rsi_c = "#fbbf24" if (sig.rsi > 70 or sig.rsi < 30) else "#f1f5f9"
+        rsi_c  = "#fbbf24" if (sig.rsi > 70 or sig.rsi < 30) else "#f1f5f9"
         macd_c = (
             "#22c55e" if sig.macd_signal == "bullish"
             else "#ef4444" if sig.macd_signal == "bearish"
@@ -906,50 +1020,24 @@ def render_screener(signals: list[EntrySignal], class_label: str) -> None:
         )
         vol_c = "#22c55e" if sig.volume_ratio >= 1.5 else "#f1f5f9"
 
-        cells = [
-            f'<span style="color:#FFD700;font-weight:700;">{ticker_label(sig.ticker)}</span>',
-            f'<span style="color:#f1f5f9;">${sig.price:,.2f}</span>',
-            f'<span style="color:{rsi_c};">{sig.rsi:.1f}</span>',
-            f'<span style="color:#f1f5f9;font-size:0.76rem;">{sig.ema_align.title()}</span>',
-            f'<span style="color:{vol_c};">{sig.volume_ratio:.2f}x</span>',
-            f'<span style="color:{macd_c};">{sig.macd_signal.title()}</span>',
-            f'<span class="pill {pill_cls}">{sig_txt}</span>',
-        ]
-        row_html = "".join(f"<span>{c}</span>" for c in cells)
-        st.markdown(
-            f'<div class="sc-grid sc-row">{row_html}</div>',
-            unsafe_allow_html=True,
+        rows_html += (
+            "<tr>"
+            f'<td style="color:#FFD700;font-weight:700;">{tlabel(sig.ticker)}</td>'
+            f'<td style="color:#f1f5f9;">${sig.price:,.2f}</td>'
+            f'<td style="color:{rsi_c};">{sig.rsi:.1f}</td>'
+            f'<td style="color:#f1f5f9;font-size:0.76rem;">{sig.ema_align.title()}</td>'
+            f'<td style="color:{vol_c};">{sig.volume_ratio:.2f}x</td>'
+            f'<td style="color:{macd_c};">{sig.macd_signal.title()}</td>'
+            f'<td><span class="pill {pill_cls}">{sig_txt}</span></td>'
+            "</tr>"
         )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Safe data helpers  (try/except to prevent black-screen crashes)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def safe_fetch(ticker: str, period: str = "6mo") -> pd.DataFrame:
-    """
-    Fetch OHLCV for one ticker. Returns an empty DataFrame on any error.
-    This is the primary guard against network / yfinance failures causing
-    a blank white or black screen.
-    """
-    try:
-        df = fetch_ohlcv(ticker, period=period, interval="1d")
-        return df if (df is not None and not df.empty) else pd.DataFrame()
-    except Exception as exc:
-        st.warning(
-            f"⚠️ **{ticker_label(ticker)}** — data fetch failed "
-            f"(`{type(exc).__name__}`). Skipping.",
-            icon="⚠️",
-        )
-        return pd.DataFrame()
-
-
-def safe_analyze(ticker: str, df: pd.DataFrame) -> Optional[EntrySignal]:
-    """Run analyze_ticker inside try/except — analysis errors are non-fatal."""
-    try:
-        return analyze_ticker(ticker, df)
-    except Exception:
-        return None
+    st.markdown(
+        f'<div class="sc-wrap">'
+        f'<table class="sc-table">{thead}<tbody>{rows_html}</tbody></table>'
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -957,43 +1045,39 @@ def safe_analyze(ticker: str, df: pd.DataFrame) -> Optional[EntrySignal]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    # 1. Sidebar must be the very first widget call
+    # 1. Sidebar (first widget call — required by Streamlit)
     sel = render_sidebar()
 
     # 2. Header
     render_header(sel)
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # 3. Astro report — computed once per session
+    # 3. Astro report — cached for the session
     if "astro_report" not in st.session_state:
         with st.spinner("🪐 Calculating planetary positions…"):
-            try:
-                st.session_state["astro_report"] = generate_daily_report()
-            except Exception as exc:
-                st.error(f"Astro engine error: {exc}")
-                st.session_state["astro_report"] = None
-
+            st.session_state["astro_report"] = safe_astro_report()
     report: Optional[DailyAstroReport] = st.session_state.get("astro_report")
 
-    # 4. Resolve tickers; invalidate screener cache on class switch
+    # 4. Tickers for the selected class; clear screener cache on class switch
     tickers = APP_UNIVERSE[sel]
     if st.session_state.get("_last_class") != sel:
         st.session_state.pop("screener_signals", None)
         st.session_state["_last_class"] = sel
 
-    # 5. Dynamic ticker tabs
-    tabs = st.tabs([ticker_label(t) for t in tickers])
+    # 5. Dynamic tabs — friendly display names as tab labels
+    tabs = st.tabs([tlabel(t) for t in tickers])
 
     # 6. Per-ticker content
     for i, ticker in enumerate(tickers):
         with tabs[i]:
-            with st.spinner(f"Fetching {ticker_label(ticker)}…"):
+            # Data fetch
+            with st.spinner(f"Fetching {tlabel(ticker)}…"):
                 df = safe_fetch(ticker)
 
             if df.empty:
                 st.error(
-                    f"**{ticker_label(ticker)}** — no market data returned. "
-                    "Check your connection or yfinance rate limits. "
+                    f"**{tlabel(ticker)}** — no market data returned. "
+                    "Check connection or yfinance rate limits. "
                     "Use **🔄 Manual Refresh** in the sidebar to retry."
                 )
                 continue
@@ -1001,41 +1085,58 @@ def main() -> None:
             sig = safe_analyze(ticker, df)
             if sig is None:
                 st.warning(
-                    f"**{ticker_label(ticker)}** — insufficient history "
-                    "(need ≥ 50 bars). Try a longer period."
+                    f"**{tlabel(ticker)}** — insufficient history "
+                    "(need ≥ 50 bars). Try a longer lookback period."
                 )
                 continue
 
-            # 4-column metrics row
+            # ── Metric cards ─────────────────────────────────────────────────
             render_metrics(sig)
 
-            # Middle: chart (left) + astro panel (right)
-            st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
-            col_l, col_r = st.columns([3, 2], gap="medium")
+            # ── Middle section: responsive two-column grid ───────────────────
+            # We use a CSS Grid div rather than st.columns() so that the layout
+            # truly responds to the viewport width.  The `auto-fit` column rule
+            # ensures the chart and astro panel each take a minimum of 480px;
+            # when the viewport cannot fit two such columns they stack vertically.
+            st.markdown(
+                "<div class='av-mid-grid'>",
+                unsafe_allow_html=True,
+            )
 
-            with col_l:
-                render_chart(ticker, sig, df)
-                render_gann_box(sig)
+            # Left cell — chart + Gann box
+            st.markdown(
+                "<div class='av-mid-left'>",
+                unsafe_allow_html=True,
+            )
+            render_chart(ticker, sig, df)
+            render_gann_box(sig)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            with col_r:
-                if report is not None:
-                    render_astro_panel(report)
-                else:
-                    st.info(
-                        "Astro engine offline — install `ephem` to enable "
-                        "Uranian formula calculations.",
-                        icon="🪐",
-                    )
+            # Right cell — astro panel
+            st.markdown(
+                "<div class='av-mid-right'>",
+                unsafe_allow_html=True,
+            )
+            if report is not None:
+                render_astro_panel(report)
+            else:
+                st.info(
+                    "Astro engine offline — install `ephem` to enable "
+                    "Uranian formula calculations.",
+                    icon="🪐",
+                )
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            # Full-width screener table
+            # Close the grid wrapper
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            # ── Full-width screener table ─────────────────────────────────────
             st.markdown("<hr>", unsafe_allow_html=True)
             if "screener_signals" not in st.session_state:
                 with st.spinner(
                     f"Running screener across {CLASS_META[sel]['label']}…"
                 ):
-                    class_data: dict[str, pd.DataFrame] = {
-                        t: safe_fetch(t) for t in tickers
-                    }
+                    class_data = {t: safe_fetch(t) for t in tickers}
                     st.session_state["screener_signals"] = screen_all(class_data)
 
             render_screener(
@@ -1043,7 +1144,7 @@ def main() -> None:
                 class_label=CLASS_META[sel]["label"],
             )
 
-            # Deep analysis prompt builder
+            # ── Deep analysis prompt ──────────────────────────────────────────
             st.markdown("<hr>", unsafe_allow_html=True)
             st.markdown(
                 '<div class="av-head">🤖 AI Deep Analysis</div>',
@@ -1052,31 +1153,31 @@ def main() -> None:
             btn_col, desc_col = st.columns([1, 3])
             with btn_col:
                 do_analysis = st.button(
-                    f"⚡ Analyze {ticker_label(ticker)}",
-                    key=f"deep_{ticker}",
+                    f"⚡ Analyze {tlabel(ticker)}", key=f"deep_{ticker}"
                 )
             with desc_col:
                 st.markdown(
-                    '<p style="color:#64748b;font-size:0.82rem;padding-top:8px;">'
+                    '<p style="color:#64748b;font-size:clamp(0.7rem,1.7vw,0.82rem);'
+                    'padding-top:8px;">'
                     "Full trade plan: entry thesis, T1/T2/T3 targets, stop rules, "
-                    "position sizing, and Grandpa Bear risk warnings."
-                    "</p>",
+                    "position sizing, and Grandpa Bear risk warnings.</p>",
                     unsafe_allow_html=True,
                 )
 
-            if do_analysis and report is not None:
-                ju_hit = next(
-                    (h for h in report.active_hits if "JU" in h.formula), None
+            if do_analysis:
+                ju_hit = (
+                    next(
+                        (h for h in report.active_hits if "JU" in h.formula), None
+                    ) if report else None
                 )
                 ju_status = (
                     f"ACTIVE (orb {ju_hit.orb:.2f}°)"
-                    if (ju_hit and ju_hit.is_active)
-                    else "Inactive"
+                    if (ju_hit and ju_hit.is_active) else "Inactive"
                 )
-                transits = []
-                if report.aries_ingress:
+                transits: list[str] = []
+                if report and report.aries_ingress:
                     transits.append("Aries Ingress — Sun 0° Aries")
-                if report.mercury_direct:
+                if report and report.mercury_direct:
                     transits.append("Mercury Station Direct ~22° Pisces")
                 if ju_hit and ju_hit.is_active:
                     transits.append(f"JU = SU/UR active (orb {ju_hit.orb:.2f}°)")
@@ -1084,7 +1185,7 @@ def main() -> None:
                 prompt = (
                     f"You are AstroVantage's Deep Analysis engine — "
                     f"CAN SLIM + Uranian Hamburg School astrology.\n\n"
-                    f"**TECHNICALS — {ticker_label(ticker)}**\n"
+                    f"**TECHNICALS — {tlabel(ticker)}**\n"
                     f"- Price: ${sig.price:,.2f}\n"
                     f"- RSI: {sig.rsi:.1f}  |  MACD: {sig.macd_signal}\n"
                     f"- EMA 21/50/200: "
@@ -1103,19 +1204,18 @@ def main() -> None:
                     f"1. Entry thesis (technical + astro combined)\n"
                     f"2. Exact entry trigger and price\n"
                     f"3. Stop-loss rule (max 8% — CAN SLIM)\n"
-                    f"4. Three targets: T1 (Pivot R1), T2 (measured move), "
-                    f"T3 (stretch)\n"
+                    f"4. Three targets: T1 (Pivot R1), T2 (measured move), T3 (stretch)\n"
                     f"5. Position sizing for $100k portfolio at 1% risk\n"
                     f"6. Grandpa Bear 'What could go wrong?' section\n"
                     f"7. 30-day astrological outlook for this sector"
                 )
 
                 with st.expander(
-                    f"📋 Analysis Prompt — {ticker_label(ticker)}", expanded=True
+                    f"📋 Analysis Prompt — {tlabel(ticker)}", expanded=True
                 ):
                     st.markdown(
                         f'<div class="av-card">'
-                        f'<pre style="color:#94a3b8;font-size:0.74rem;'
+                        f'<pre style="color:#94a3b8;font-size:clamp(0.66rem,1.5vw,0.76rem);'
                         f'white-space:pre-wrap;font-family:monospace;">'
                         f"{prompt}</pre></div>",
                         unsafe_allow_html=True,
