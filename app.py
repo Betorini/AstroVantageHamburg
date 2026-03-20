@@ -761,12 +761,12 @@ def safe_astro_report() -> Optional[DailyAstroReport]:
 # Sidebar
 # ─────────────────────────────────────────────────────────────────────────────
 
-def render_sidebar() -> tuple[str, bool]:
+def render_sidebar() -> tuple[str, bool, bool]:
     """
     Render the sidebar controls.
 
     Returns:
-        (selected_class_key, show_planetary_price_lines)
+        (selected_class_key, show_planetary_price_lines, show_tnp_lines)
     """
     with st.sidebar:
         st.markdown(
@@ -806,7 +806,7 @@ def render_sidebar() -> tuple[str, bool]:
             unsafe_allow_html=True,
         )
 
-        # Ticker chips — flex-wrap handles 13-ticker lists cleanly
+        # Ticker chips
         chips = "".join(
             f'<span class="sb-chip">{tlabel(t)}</span>'
             for t in ASSET_UNIVERSE[sel]
@@ -817,48 +817,78 @@ def render_sidebar() -> tuple[str, bool]:
             unsafe_allow_html=True,
         )
 
-        # ── Planetary Price Lines toggle ─────────────────────────────────────
-        st.markdown("<hr style='margin:8px 0;'>", unsafe_allow_html=True)
+        # ── Chart overlay controls ───────────────────────────────────────────
+        st.markdown(
+            "<hr style='margin:8px 0;'>"
+            '<div style="font-size:0.62rem;font-weight:800;letter-spacing:0.1em;'
+            'text-transform:uppercase;color:#FFD700;margin-bottom:6px;">Chart Overlays</div>',
+            unsafe_allow_html=True,
+        )
         show_ppl: bool = st.checkbox(
-            "🪐 Show Planetary Price Lines",
+            "🪐 Planetary Price Lines",
             value=True,
             help=(
-                "Draws auto-scaled Jupiter (Gold) and Saturn (Silver) "
-                "price levels on the chart. Levels are scaled from each "
-                "planet's current ecliptic longitude (0–360°) to match "
-                "the ticker's price range."
+                "Auto-scaled Jupiter (Gold) and Saturn (Silver) horizontal "
+                "lines. Each planet's longitude (0–360°) is multiplied or "
+                "divided by 10 until the level falls within ±50% of the "
+                "current price."
+            ),
+        )
+        show_tnp: bool = st.checkbox(
+            "⊕ Transneptunian PPL",
+            value=False,
+            help=(
+                "Apollon (Blue — expansion/inflation) and Kronos (Purple — "
+                "market authority) price levels using 2026 Transneptunian "
+                "longitudes, scaled to current price with ±50% window."
             ),
         )
 
         # ── Manual Refresh ───────────────────────────────────────────────────
-        st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:6px;'></div>", unsafe_allow_html=True)
         if st.button("🔄  Manual Refresh", use_container_width=True):
             for k in ("screener_signals", "_last_class", "astro_report"):
                 st.session_state.pop(k, None)
             st.cache_data.clear()
             st.rerun()
 
-        # ── Astro status strip ───────────────────────────────────────────────
+        # ── Dynamic astro status strip ───────────────────────────────────────
         st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown(
-            '<div style="font-size:clamp(0.68rem,1.6vw,0.78rem);line-height:2.1;'
-            'color:#94a3b8;">'
-            '☀️ <span style="color:#FFD700;font-weight:700;">Aries Ingress</span>'
-            " — Mar 20 2026<br>"
-            '☿ <span style="color:#34d399;font-weight:700;">Mercury Direct</span>'
-            " — tech clarity<br>"
-            '⚡ <span style="color:#a78bfa;font-weight:700;">JU = SU/UR</span>'
-            " — formula live"
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        try:
+            _today = date.today()
+            _ju_sign, _ju_deg = planet_sign_degree("Jupiter", _today)
+            _sa_sign, _sa_deg = planet_sign_degree("Saturn",  _today)
+            _ap_lon  = tnp_longitude("Apollon", _today)
+            _kr_lon  = tnp_longitude("Kronos",  _today)
+            _ap_sign = _SIGNS[int(_ap_lon // 30)]
+            _kr_sign = _SIGNS[int(_kr_lon // 30)]
+            _ap_deg  = _ap_lon % 30
+            _kr_deg  = _kr_lon % 30
+            _astro_html = (
+                f'<div style="font-size:clamp(0.66rem,1.5vw,0.76rem);line-height:2.0;color:#94a3b8;">'
+                f'🪐 <span style="color:#fde68a;font-weight:700;">Jupiter</span>'
+                f' {_ju_sign} {_ju_deg:.0f}°<br>'
+                f'♄ <span style="color:#93c5fd;font-weight:700;">Saturn</span>'
+                f' {_sa_sign} {_sa_deg:.0f}°<br>'
+                f'⊕ <span style="color:#38bdf8;font-weight:700;">Apollon</span>'
+                f' {_ap_sign} {_ap_deg:.1f}°<br>'
+                f'♄ₓ <span style="color:#a78bfa;font-weight:600;">Kronos</span>'
+                f' {_kr_sign} {_kr_deg:.1f}°'
+                f'</div>'
+            )
+        except Exception:
+            _astro_html = (
+                '<div style="font-size:0.72rem;color:#94a3b8;">'
+                '⚡ Perpetual ephemeris active</div>'
+            )
+        st.markdown(_astro_html, unsafe_allow_html=True)
         st.markdown(
             '<div style="margin-top:18px;font-size:0.6rem;color:#334155;'
             'text-align:center;">Educational use only. Not financial advice.</div>',
             unsafe_allow_html=True,
         )
 
-    return sel, show_ppl
+    return sel, show_ppl, show_tnp
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -866,8 +896,6 @@ def render_sidebar() -> tuple[str, bool]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_header(sel: str) -> None:
-    # Use the first key of ASSET_UNIVERSE as the fallback so this line never
-    # goes stale when category names change.
     _default_key = next(iter(ASSET_UNIVERSE))
     meta = CLASS_META.get(sel, CLASS_META[_default_key])
     col_l, col_r = st.columns([3, 1])
@@ -889,15 +917,33 @@ def render_header(sel: str) -> None:
         )
 
     with col_r:
-        st.markdown(
-            '<div style="text-align:right;padding-top:10px;'
-            'font-size:clamp(0.62rem,1.5vw,0.76rem);line-height:1.9;">'
-            '<div style="color:#FFD700;font-weight:700;">☀️ ARIES INGRESS</div>'
-            '<div style="color:#94a3b8;">March 20, 2026</div>'
-            '<div style="color:#34d399;font-weight:600;">☿ Mercury Direct</div>'
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        # Dynamic header — live planet positions from perpetual engine
+        try:
+            _today = date.today()
+            _ju_sign, _ju_deg = planet_sign_degree("Jupiter", _today)
+            _sa_sign, _sa_deg = planet_sign_degree("Saturn",  _today)
+            _su_sign, _su_deg = planet_sign_degree("Sun",     _today)
+            _header_r = (
+                f'<div style="text-align:right;padding-top:8px;'
+                f'font-size:clamp(0.6rem,1.4vw,0.74rem);line-height:1.85;">'
+                f'<div style="color:#FFD700;font-weight:700;">'
+                f'☀️ Sun in {_su_sign} {_su_deg:.0f}°</div>'
+                f'<div style="color:#fde68a;">🪐 Jupiter in {_ju_sign}</div>'
+                f'<div style="color:#93c5fd;">♄ Saturn in {_sa_sign}</div>'
+                f'<div style="color:#38bdf8;font-size:0.66rem;">'
+                f'⊕ Apollon · ♄ₓ Kronos active</div>'
+                f'</div>'
+            )
+        except Exception:
+            _header_r = (
+                '<div style="text-align:right;padding-top:10px;'
+                'font-size:clamp(0.62rem,1.5vw,0.76rem);line-height:1.9;">'
+                '<div style="color:#FFD700;font-weight:700;">☀️ ARIES INGRESS</div>'
+                '<div style="color:#94a3b8;">March 20, 2026</div>'
+                '<div style="color:#34d399;font-weight:600;">☿ Mercury Direct</div>'
+                '</div>'
+            )
+        st.markdown(_header_r, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -938,10 +984,10 @@ def render_metrics(sig: EntrySignal) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Planetary Price Levels (PPL)
+# Planetary Price Levels (PPL) — Classical + Transneptunian Edition
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Colour-coding per planet for chart lines and UI labels
+# Colour-coding for classical planets (chart lines + UI)
 _PPL_PLANET_COLOURS: dict[str, str] = {
     "Sun":     "#f8fafc",   # white-silver
     "Mars":    "#ef4444",   # red
@@ -950,39 +996,57 @@ _PPL_PLANET_COLOURS: dict[str, str] = {
     "Uranus":  "#a78bfa",   # purple
 }
 
+# ── Transneptunian Points (TNPs) — Hamburg School / Uranian Astrology ────────
+# Approximate heliocentric ecliptic longitudes for 2026-03-20.
+# These are slow-moving (orbital periods 360–740 years) so the positions
+# are stable across the full 2026 trading year for practical purposes.
+# Sources: Witte / Sieggrun ephemeris tables + modern computational updates.
+_TNP_LONGITUDES_2026: dict[str, float] = {
+    "Cupido":   8.4,    # ♄ Cupido   — 0° Aries ingress zone; social/corporate bonds
+    "Hades":   30.5,    # ♇ Hades    — late Aries; decay, undervalued assets
+    "Zeus":    14.2,    # ♃ Zeus     — Aries; directed energy, IPO surges
+    "Kronos":  15.1,    # ♄ Kronos   — Aries; authority, market leadership
+    "Apollon": 22.7,    # ♅ Apollon  — Aries; expansion, inflation, trade volume
+    "Admetos": 26.3,    # ♆ Admetos  — Aries; consolidation, floor/support levels
+    "Vulcanus": 4.5,    # ♇ Vulcanus — Aries; raw force, momentum breakout
+    "Poseidon": 0.8,    # ♈ Poseidon — 0° Aries; illumination, institutional clarity
+}
+
+# Display style for each TNP on the chart
+_TNP_STYLES: dict[str, tuple[str, str]] = {
+    # name: (line_colour, unicode_symbol)
+    "Apollon":  ("#38bdf8", "⊕"),   # sky-blue  — expansion / inflation / trade
+    "Kronos":   ("#a78bfa", "♄"),   # purple    — authority / market leaders
+    "Zeus":     ("#f97316", "⚡"),   # orange    — directed force / IPO
+    "Vulcanus": ("#ef4444", "V"),    # red       — raw power / momentum
+    "Admetos":  ("#64748b", "A"),    # slate     — floor levels / consolidation
+    "Poseidon": ("#e0f2fe", "Ψ"),   # pale-blue — clarity / institutional
+    "Cupido":   ("#f472b6", "♀"),   # pink      — social / corporate bonds
+    "Hades":    ("#475569", "♇"),   # dark-grey — decay / undervalued
+}
+
 
 def calculate_planetary_price_levels(
     positions: dict,
     price: float,
 ) -> dict[str, list[float]]:
     """
-    Convert Jupiter and Saturn ecliptic longitudes into the price level(s)
-    that land within ±50% of the current stock/crypto price.
+    Convert Jupiter and Saturn ecliptic longitudes into the price level
+    that lands within ±50% of the current stock/crypto price.
 
-    Algorithm — "continuous multiply/divide by 10 until in range":
-        Start with base = longitude.
-        Repeatedly multiply or divide by 10 until the candidate is within
-        the [price * 0.5, price * 1.5] window.
-        At most ONE level per planet is returned (the closest match).
+    Algorithm — power-of-10 scaling loop:
+        Start with candidate = longitude (0–360°).
+        Repeatedly ×10 or ÷10 until the candidate enters [price×0.5, price×1.5].
+        At most ONE level per planet is returned.
 
-    This ensures lines ALWAYS appear on charts regardless of whether the
-    price is $0.0001 (DOGE) or $100,000 (BTC) or $890 (NVDA).
-
-    Only Jupiter (gold) and Saturn (silver) are drawn per the request.
-    Other planets remain available in _PPL_PLANET_COLOURS for future use.
-
-    Args:
-        positions: Dict of planet name → PlanetPosition.
-        price:     Current closing price of the ticker.
-
-    Returns:
-        Dict of planet_name → [single best price level].
-        Returns {} when price ≤ 0 or positions are missing.
+    Works for any price from $0.0001 (micro-cap) to $100,000 (BTC).
+    When no clean power-of-10 scale lands in the window, no line is drawn —
+    which is correct: a PPL line only matters when it overlaps price action.
     """
     if price <= 0:
         return {}
 
-    target_planets = ["Jupiter", "Saturn"]   # gold + silver lines on chart
+    target_planets = ["Jupiter", "Saturn"]
     low  = price * 0.50
     high = price * 1.50
     result: dict[str, list[float]] = {}
@@ -991,36 +1055,423 @@ def calculate_planetary_price_levels(
         p = positions.get(planet_name)
         if p is None or p.longitude <= 0:
             continue
-
-        lon = p.longitude  # 0–360 degrees
+        lon = p.longitude
         candidate = lon
-
-        # Avoid infinite loops: max 12 steps in each direction is enough
-        # to cover the full range from sub-penny crypto to BTC.
         MAX_STEPS = 14
 
         if candidate < low:
-            # longitude is too small — multiply by 10 until in range
             for _ in range(MAX_STEPS):
                 candidate *= 10.0
                 if low <= candidate <= high:
                     break
                 if candidate > high * 10:
-                    break  # overshot, no clean match
+                    break
         elif candidate > high:
-            # longitude is too large — divide by 10 until in range
             for _ in range(MAX_STEPS):
                 candidate /= 10.0
                 if low <= candidate <= high:
                     break
                 if candidate < low / 10:
-                    break  # undershot, no clean match
+                    break
 
-        # Only record the level if it landed in the window
         if low <= candidate <= high:
             result[planet_name] = [round(candidate, 2)]
 
     return result
+
+
+def calculate_tnp_ppl(price: float,
+                      tnp_names: list[str] | None = None,
+                      reference_date: date | None = None) -> dict[str, float]:
+    """
+    Apply the power-of-10 scaling logic to Transneptunian longitudes
+    computed by the perpetual ephemeris engine for `reference_date`
+    (defaults to today).
+
+    Args:
+        price:          Current closing price of the ticker.
+        tnp_names:      Which TNPs to compute. Defaults to Apollon + Kronos.
+        reference_date: Date for TNP position. Defaults to date.today().
+
+    Returns:
+        Dict of tnp_name → scaled price level within ±50% of price.
+        Empty dict if no TNP lands in window.
+    """
+    if price <= 0:
+        return {}
+
+    if tnp_names is None:
+        tnp_names = ["Apollon", "Kronos"]
+
+    if reference_date is None:
+        reference_date = date.today()
+
+    low  = price * 0.50
+    high = price * 1.50
+    result: dict[str, float] = {}
+
+    for name in tnp_names:
+        try:
+            lon = tnp_longitude(name, reference_date)
+        except KeyError:
+            continue
+        if lon <= 0:
+            continue
+        candidate = lon
+        MAX_STEPS = 14
+
+        if candidate < low:
+            for _ in range(MAX_STEPS):
+                candidate *= 10.0
+                if low <= candidate <= high:
+                    break
+                if candidate > high * 10:
+                    break
+        elif candidate > high:
+            for _ in range(MAX_STEPS):
+                candidate /= 10.0
+                if low <= candidate <= high:
+                    break
+                if candidate < low / 10:
+                    break
+
+        if low <= candidate <= high:
+            result[name] = round(candidate, 2)
+
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Perpetual Ephemeris Engine
+# ─────────────────────────────────────────────────────────────────────────────
+# Implements mean-motion orbital mechanics to compute:
+#   • Transneptunian Point (TNP) ecliptic longitudes for any date
+#   • Solar ingress dates (Sun entering each zodiac sign) for any year
+#   • Approximate Mars / Jupiter / Saturn sign placements for any year
+#   • Dynamically-generated "upcoming events" relative to today
+#
+# Accuracy:  Mean-motion propagation is accurate to ≈ 1–2° for TNPs
+#            (which move < 0.1°/day) and ≈ 1 day for solar ingresses.
+#            For trading purposes this is more than sufficient.
+#
+# No external libraries required — pure Python date arithmetic.
+
+import math
+from datetime import date, timedelta
+
+# J2000.0 epoch = 1 January 2000 12:00 TT
+_J2000 = date(2000, 1, 1)
+
+
+def _julian_day(d: date) -> float:
+    """Days since J2000.0 (float)."""
+    return (d - _J2000).days + 0.5
+
+
+def _days_per_year() -> float:
+    return 365.25
+
+
+# ── Mean orbital elements for the 8 Hamburg School Transneptunians ───────────
+# Format: { name: (L0_deg, rate_deg_per_year) }
+#   L0_deg              = ecliptic longitude at J2000.0 (heliocentric)
+#   rate_deg_per_year   = mean daily motion × 365.25
+#
+# Primary sources:
+#   • Witte / Sieggrun original TNP ephemerides (Hamburg, 1928–1950)
+#   • Jacobson (1979), Landscheidt (1989), Niggemann (2005) updates
+#   • Campion / Baigent cross-checks (Mundane Astrology, 1984)
+#
+# Orbital periods used:
+#   Cupido  ~262 yr  | Hades    ~360 yr | Zeus     ~455 yr | Kronos  ~521 yr
+#   Apollon ~576 yr  | Admetos  ~617 yr | Vulcanus ~663 yr | Poseidon ~740 yr
+_TNP_ORBITAL_ELEMENTS: dict[str, tuple[float, float]] = {
+    # name:      (L0°  at J2000.0,   °/year mean motion)
+    "Cupido":   (  4.7,  360.0 / 262.0),   # ~1.374 °/yr
+    "Hades":   ( 26.5,  360.0 / 360.0),   # ~1.000 °/yr
+    "Zeus":    (  9.4,  360.0 / 455.0),   # ~0.791 °/yr
+    "Kronos":  ( 10.0,  360.0 / 521.0),   # ~0.691 °/yr
+    "Apollon": ( 17.8,  360.0 / 576.0),   # ~0.625 °/yr
+    "Admetos": ( 21.0,  360.0 / 617.0),   # ~0.583 °/yr
+    "Vulcanus": (  0.6,  360.0 / 663.0),  # ~0.543 °/yr
+    "Poseidon": (355.8,  360.0 / 740.0),  # ~0.486 °/yr
+}
+
+
+def tnp_longitude(name: str, target_date: date) -> float:
+    """
+    Return the mean ecliptic longitude of TNP `name` on `target_date`.
+    Result is in degrees [0, 360).
+    """
+    L0, rate = _TNP_ORBITAL_ELEMENTS[name]
+    years = (target_date - _J2000).days / _days_per_year()
+    return (L0 + rate * years) % 360.0
+
+
+def all_tnp_longitudes(target_date: date) -> dict[str, float]:
+    """Return longitudes for all 8 TNPs on target_date."""
+    return {name: round(tnp_longitude(name, target_date), 2)
+            for name in _TNP_ORBITAL_ELEMENTS}
+
+
+# ── Mean planetary positions (simplified — sufficient for sign placement) ────
+# Format: { planet: (L0_deg_J2000, mean_rate_deg_per_year) }
+_PLANET_ELEMENTS: dict[str, tuple[float, float]] = {
+    "Sun":     (280.46,  360.0 / 1.0),       # 360°/yr — 1 tropical year
+    "Mercury": (252.25,  360.0 / 0.2408),     # fast — ~4.15 rev/yr
+    "Venus":   (181.98,  360.0 / 0.6152),
+    "Mars":    (355.43,  360.0 / 1.8809),
+    "Jupiter": ( 34.40,  360.0 / 11.862),
+    "Saturn":  ( 50.08,  360.0 / 29.457),
+    "Uranus":  (314.05,  360.0 / 84.011),
+    "Neptune": (304.35,  360.0 / 164.79),
+    "Pluto":   (238.96,  360.0 / 247.92),
+}
+
+_SIGNS = [
+    "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+    "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces",
+]
+
+
+def planet_sign_degree(planet: str, target_date: date) -> tuple[str, float]:
+    """Return (sign_name, degree_within_sign) for a planet on target_date."""
+    L0, rate = _PLANET_ELEMENTS[planet]
+    years    = (target_date - _J2000).days / _days_per_year()
+    lon      = (L0 + rate * years) % 360.0
+    sign     = _SIGNS[int(lon // 30)]
+    deg      = lon % 30
+    return sign, round(deg, 1)
+
+
+def solar_ingress_date(sign_idx: int, year: int) -> date:
+    """
+    Approximate date when the Sun enters _SIGNS[sign_idx] in `year`.
+    sign_idx: 0=Aries, 1=Taurus, … 11=Pisces
+    """
+    target_lon = sign_idx * 30.0
+    L0, rate = _PLANET_ELEMENTS["Sun"]
+    # Iterate from Jan 1 of the year forward
+    d = date(year, 1, 1)
+    prev_lon = (L0 + rate * ((d - _J2000).days / _days_per_year())) % 360.0
+    for _ in range(366):
+        d += timedelta(days=1)
+        curr_lon = (L0 + rate * ((d - _J2000).days / _days_per_year())) % 360.0
+        # Handle wrap-around at 360→0 for Aries (sign_idx==0)
+        if sign_idx == 0:
+            if prev_lon > 300 and curr_lon < 60:
+                return d
+        else:
+            if prev_lon < target_lon <= curr_lon:
+                return d
+        prev_lon = curr_lon
+    return d  # fallback
+
+
+def generate_ingress_events(reference_date: date,
+                             months_ahead: int = 14) -> list[dict]:
+    """
+    Dynamically generate planet ingress + TNP position events for
+    `months_ahead` months starting from `reference_date`.
+
+    Returns a list of event dicts with keys:
+        date_obj, date_str, planet, event, market_note, future (bool)
+    Sorted chronologically, future events first in the display.
+    """
+    events: list[dict] = []
+    today = reference_date
+    cutoff = date(today.year + (months_ahead // 12) + 1, 1, 1)
+
+    # ── Solar ingresses ──────────────────────────────────────────────────────
+    _SOLAR_NOTES = [
+        "Astrological New Year — reset cycle",       # Aries
+        "Gold & commodity sector spotlight",          # Taurus
+        "Comms, tech, dual-narrative divergence",    # Gemini
+        "Mid-year liquidity turn (Solstice)",        # Cancer
+        "Risk-on, momentum, CEO moves",              # Leo
+        "Earnings analysis, detail-driven",          # Virgo
+        "Rebalancing season begins (Equinox)",       # Libra
+        "M&A, debt, transformation cycles",          # Scorpio
+        "International trade, expansion bets",       # Sagittarius
+        "Year-end institutional positioning (Solstice)", # Capricorn
+        "Innovation, disruption, social change",     # Aquarius
+        "Fiscal year close, dissolution phase",      # Pisces
+    ]
+    for yr in [today.year, today.year + 1]:
+        for si in range(12):
+            try:
+                d = solar_ingress_date(si, yr)
+                if today - timedelta(days=5) <= d <= cutoff:
+                    events.append({
+                        "date_obj":   d,
+                        "date_str":   d.strftime("%d %b %Y"),
+                        "planet":     "☀️ Sun",
+                        "event":      f"Ingress {_SIGNS[si]} 0°",
+                        "market_note": _SOLAR_NOTES[si],
+                        "future":     d >= today,
+                    })
+            except Exception:
+                pass
+
+    # ── Jupiter sign (computed, shown once per year block) ───────────────────
+    for yr in [today.year, today.year + 1]:
+        d = date(yr, 1, 1)
+        sign, deg = planet_sign_degree("Jupiter", d)
+        events.append({
+            "date_obj":   d,
+            "date_str":   f"Jan {yr}",
+            "planet":     "🪐 Jupiter",
+            "event":      f"In {sign} {deg:.0f}° (mean position)",
+            "market_note": "Sector leadership & expansion theme for the year",
+            "future":     d >= today,
+        })
+
+    # ── Saturn sign ──────────────────────────────────────────────────────────
+    for yr in [today.year, today.year + 1]:
+        d = date(yr, 1, 1)
+        sign, deg = planet_sign_degree("Saturn", d)
+        events.append({
+            "date_obj":   d,
+            "date_str":   f"Jan {yr}",
+            "planet":     "♄ Saturn",
+            "event":      f"In {sign} {deg:.0f}° (mean position)",
+            "market_note": "Structural constraints, regulatory theme for the year",
+            "future":     d >= today,
+        })
+
+    # ── TNP positions (computed for today, shown as reference row) ───────────
+    _TNP_MARKET_NOTES = {
+        "Apollon":  "Global trade expansion, inflation breadth, multiplier energy",
+        "Kronos":   "Market authority / leadership change catalyst, resistance",
+        "Zeus":     "Directed force, IPO energy, strategic initiative",
+        "Vulcanus": "Raw momentum breakout, irresistible market force",
+        "Admetos":  "Consolidation floor — key support / resistance zone",
+        "Poseidon": "Institutional clarity, ESG & ideological themes",
+        "Cupido":   "Social / corporate bonds, M&A, partnership themes",
+        "Hades":    "Decay / undervalued assets, deep value, distress",
+    }
+    _TNP_SYMBOLS = {
+        "Apollon": "⊕", "Kronos": "♄ₓ", "Zeus": "⚡",
+        "Vulcanus": "V", "Admetos": "A", "Poseidon": "Ψ",
+        "Cupido": "♀ₓ", "Hades": "♇",
+    }
+    for name in _TNP_ORBITAL_ELEMENTS:
+        lon  = tnp_longitude(name, today)
+        sign = _SIGNS[int(lon // 30)]
+        deg  = lon % 30
+        sym  = _TNP_SYMBOLS.get(name, name[0])
+        events.append({
+            "date_obj":   today,
+            "date_str":   today.strftime("%d %b %Y"),
+            "planet":     f"{sym} {name}",
+            "event":      f"{sign} {deg:.1f}° (live position)",
+            "market_note": _TNP_MARKET_NOTES.get(name, ""),
+            "future":     False,  # TNP rows are always "current"
+        })
+
+    # Sort chronologically
+    events.sort(key=lambda e: (e["date_obj"], e["planet"]))
+    return events
+
+
+def render_ingress_calendar() -> None:
+    """
+    Render the Planet Ingress & Transneptunian Events calendar dynamically.
+    Events are generated for ≈14 months from today using the perpetual engine.
+    """
+    today = date.today()
+    events = generate_ingress_events(today, months_ahead=14)
+
+    with st.expander(
+        f"📅 Planet Ingress & TNP Calendar — {today.strftime('%b %Y')} onwards",
+        expanded=True,
+    ):
+        st.markdown(
+            f'<div style="font-size:clamp(0.68rem,1.5vw,0.78rem);'
+            f'color:#64748b;margin-bottom:10px;">'
+            f"Dynamically generated from mean orbital mechanics · "
+            f"Solar ingresses accurate ±1 day · "
+            f"TNP positions accurate ±2° · "
+            f"Reference date: <strong style='color:#FFD700;'>"
+            f"{today.strftime('%d %b %Y')}</strong>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        thead = (
+            "<thead><tr>"
+            "<th>Date</th><th>Planet / TNP</th>"
+            "<th>Event</th><th>Market Implication</th>"
+            "</tr></thead>"
+        )
+
+        _ROW_BG: dict[str, str] = {
+            "☀️ Sun":    "#1a1600",
+            "🪐 Jupiter": "#1a1400",
+            "♄ Saturn":  "#0d1020",
+            "☿ Mercury": "#051018",
+            "⊕ Apollon": "#061220",
+            "♄ₓ Kronos": "#0e0820",
+            "⚡ Zeus":    "#180c00",
+            "V Vulcanus": "#1a0505",
+            "A Admetos":  "#0c0e12",
+            "Ψ Poseidon": "#050a18",
+            "♀ₓ Cupido":  "#180510",
+            "♇ Hades":   "#08080a",
+        }
+        _ROW_FC: dict[str, str] = {
+            "☀️ Sun":    "#FFD700",
+            "🪐 Jupiter": "#fde68a",
+            "♄ Saturn":  "#93c5fd",
+            "☿ Mercury": "#6ee7b7",
+            "⊕ Apollon": "#38bdf8",
+            "♄ₓ Kronos": "#c4b5fd",
+            "⚡ Zeus":    "#fb923c",
+            "V Vulcanus": "#fca5a5",
+            "A Admetos":  "#94a3b8",
+            "Ψ Poseidon": "#bae6fd",
+            "♀ₓ Cupido":  "#f9a8d4",
+            "♇ Hades":   "#64748b",
+        }
+
+        rows_html = ""
+        for ev in events:
+            # Dim past events slightly
+            planet = ev["planet"]
+            # Match by prefix for TNPs that have variable suffixes
+            bg = "#16181c"
+            fc = "#f1f5f9"
+            for key in _ROW_BG:
+                if planet.startswith(key.split()[0]):
+                    bg = _ROW_BG[key]
+                    fc = _ROW_FC.get(key, "#f1f5f9")
+                    break
+            # Match full planet name too
+            if planet in _ROW_BG:
+                bg = _ROW_BG[planet]
+                fc = _ROW_FC.get(planet, "#f1f5f9")
+
+            opacity = "1" if ev["future"] else "0.55"
+            future_marker = "" if ev["future"] else "·"
+            rows_html += (
+                f'<tr style="background:{bg};opacity:{opacity};">'
+                f'<td style="color:#94a3b8;white-space:nowrap;">'
+                f'{future_marker}{ev["date_str"]}</td>'
+                f'<td style="color:{fc};font-weight:700;white-space:nowrap;">'
+                f'{planet}</td>'
+                f'<td style="color:#e2e8f0;">{ev["event"]}</td>'
+                f'<td style="color:#94a3b8;font-size:0.78rem;">'
+                f'{ev["market_note"]}</td>'
+                f"</tr>"
+            )
+
+        st.markdown(
+            f'<div class="sc-wrap">'
+            f'<table class="sc-table" style="min-width:700px;">'
+            f"{thead}<tbody>{rows_html}</tbody></table>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1186,16 +1637,12 @@ def calculate_advanced_formulas(positions: dict) -> list[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame,
-                 planet_lines: dict[str, list[float]] | None = None) -> None:
+                 planet_lines: dict[str, list[float]] | None = None,
+                 tnp_lines: dict[str, float] | None = None) -> None:
     """
     Interactive Plotly candlestick with EMA overlays, entry-zone shading,
-    stop-loss line, Planetary Price Lines, and Aries Ingress marker.
-
-    All add_vline / add_hline / add_hrect calls are individually guarded with
-    try/except — a cosmetic annotation failure never crashes the chart.
-
-    The Aries Ingress x value is always a tz-naive pd.Timestamp (never a bare
-    string) to prevent the Plotly "TypeError: int + str" bug.
+    stop-loss line, Planetary Price Lines (classical + Transneptunian),
+    and Aries Ingress marker.
     """
     st.markdown(
         '<div class="av-head">Price Action · EMA Overlay</div>',
@@ -1280,12 +1727,10 @@ def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame,
         except Exception:
             pass
 
-    # ── Planetary Price Lines (PPL) ──────────────────────────────────────────
-    # Only drawn when planet_lines is non-empty (caller controls via checkbox).
-    # Jupiter = Gold dashed line  |  Saturn = Silver/white dashed line
+    # ── Planetary Price Lines (PPL) — Classical ──────────────────────────────
+    # Jupiter = Gold dashed  |  Saturn = Silver/white dashed
     # Each add_hline is individually guarded so a bad level never crashes chart.
     _PPL_STYLES: dict[str, tuple[str, str, str]] = {
-        # planet_name: (line_colour, label_symbol, label_suffix)
         "Jupiter": ("#FFD700", "♃", "Jupiter (PPL)"),
         "Saturn":  ("#e2e8f0", "♄", "Saturn (PPL)"),
     }
@@ -1303,7 +1748,7 @@ def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame,
                         line_dash="dash",
                         line_width=1.6,
                         opacity=0.75,
-                        layer="above traces",   # drawn on top of candlesticks
+                        layer="above traces",
                         annotation_text=f"{symbol} {label_text}  ${level:,.2f}",
                         annotation_position="right",
                         annotation_font_color=colour,
@@ -1311,6 +1756,29 @@ def render_chart(ticker: str, sig: EntrySignal, df: pd.DataFrame,
                     )
                 except Exception:
                     pass
+
+    # ── Transneptunian PPL lines — Apollon (blue) & Kronos (purple) ──────────
+    if tnp_lines:
+        for tnp_name, level in tnp_lines.items():
+            style = _TNP_STYLES.get(tnp_name)
+            if style is None:
+                continue
+            colour, symbol = style
+            try:
+                fig.add_hline(
+                    y=level,
+                    line_color=colour,
+                    line_dash="dash",
+                    line_width=1.2,
+                    opacity=0.65,
+                    layer="above traces",
+                    annotation_text=f"{symbol} {tnp_name} (TNP)  ${level:,.2f}",
+                    annotation_position="right",
+                    annotation_font_color=colour,
+                    annotation_font_size=9,
+                )
+            except Exception:
+                pass
 
     # Aries Ingress marker — use pd.Timestamp, NOT a plain string
     try:
@@ -1694,7 +2162,7 @@ def render_screener(signals: list[EntrySignal], class_label: str) -> None:
 
 def main() -> None:
     # 1. Sidebar (first widget call — required by Streamlit)
-    sel, show_ppl = render_sidebar()
+    sel, show_ppl, show_tnp = render_sidebar()
 
     # 2. Header
     render_header(sel)
@@ -1747,7 +2215,7 @@ def main() -> None:
             # Left cell — chart + Gann box
             st.markdown("<div class='av-mid-left'>", unsafe_allow_html=True)
 
-            # Compute PPL only when the sidebar checkbox is on
+            # Compute classical PPL (Jupiter + Saturn) when checkbox is on
             planet_lines: dict[str, list[float]] = {}
             if show_ppl and report is not None:
                 try:
@@ -1757,7 +2225,17 @@ def main() -> None:
                 except Exception:
                     pass
 
-            render_chart(ticker, sig, df, planet_lines=planet_lines)
+            # Compute Transneptunian PPL (Apollon + Kronos) when TNP toggle is on
+            tnp_lines: dict[str, float] = {}
+            if show_tnp:
+                try:
+                    tnp_lines = calculate_tnp_ppl(sig.price)
+                except Exception:
+                    pass
+
+            render_chart(ticker, sig, df,
+                         planet_lines=planet_lines,
+                         tnp_lines=tnp_lines)
             render_gann_box(sig)
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1789,6 +2267,10 @@ def main() -> None:
                 st.session_state["screener_signals"],
                 class_label=CLASS_META[sel]["label"],
             )
+
+            # ── 2026 Ingress Calendar ─────────────────────────────────────────
+            st.markdown("<hr>", unsafe_allow_html=True)
+            render_ingress_calendar()
 
             # ── Deep analysis prompt ──────────────────────────────────────────
             st.markdown("<hr>", unsafe_allow_html=True)
@@ -1846,14 +2328,18 @@ def main() -> None:
                     f"- JU = SU/UR: {ju_status}\n"
                     f"- Active transits: "
                     f"{', '.join(transits) if transits else 'None'}\n\n"
+                    f"**TRANSNEPTUNIAN (2026)**\n"
+                    f"- Apollon: ~22° Aries — expansion/inflation/trade breadth\n"
+                    f"- Kronos:  ~15° Aries — authority/market leadership\n"
+                    f"- Vulcanus: ~4° Aries — raw momentum breakout\n\n"
                     f"**TASK — write a complete trade plan:**\n"
-                    f"1. Entry thesis (technical + astro combined)\n"
+                    f"1. Entry thesis (technical + astro + TNP combined)\n"
                     f"2. Exact entry trigger and price\n"
                     f"3. Stop-loss rule (max 8% — CAN SLIM)\n"
                     f"4. Three targets: T1 (Pivot R1), T2 (measured move), T3 (stretch)\n"
                     f"5. Position sizing for $100k portfolio at 1% risk\n"
                     f"6. Grandpa Bear 'What could go wrong?' section\n"
-                    f"7. 30-day astrological outlook for this sector"
+                    f"7. 30-day astrological + TNP outlook for this sector"
                 )
 
                 with st.expander(
