@@ -255,7 +255,7 @@ st.set_page_config(
     page_title="AstroVantage",
     page_icon="🔭",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -430,20 +430,28 @@ html, body,
     border: 1px solid var(--border) !important;
     border-radius: var(--radius) !important;
     padding: clamp(10px, 2vw, 20px) clamp(12px, 2.5vw, 22px) !important;
-    min-width: 0 !important;       /* critical: prevents overflow in tight grids */
+    min-width: 0 !important;
     word-break: break-word;
+    overflow: visible !important;   /* never clip the price value */
 }
 [data-testid="stMetricValue"] {
     color: var(--gold) !important;
-    /* 3.5rem target, clamped so it never overflows a 4-col iPad cell (~180px). */
-    /* clamp floor 1.6rem keeps it readable on small phones.                    */
-    /* clamp ceiling 3.5rem = ~56px on a 1440px desktop — prominent and bold.   */
-    /* The 5.5vw middle ensures smooth scaling across all breakpoints.           */
-    font-size: clamp(1.6rem, 5.5vw, 3.5rem) !important;
+    /*
+     * RESPONSIVE PRICE FIX:
+     * clamp(1.8rem, 6vw, 3.5rem)
+     *   • 1.8rem floor  — minimum on very small phones
+     *   • 6vw  middle   — scales with viewport; on a 768px iPad = 46px
+     *   • 3.5rem ceiling — ~56px on large desktops
+     * white-space: normal + overflow: visible ensure the price string
+     * NEVER gets clipped to "$4,..." regardless of column width.
+     */
+    font-size:   clamp(1.8rem, 6vw, 3.5rem) !important;
     font-weight: 800 !important;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal !important;   /* allow wrap rather than truncate */
+    overflow:    visible !important;
+    text-overflow: unset !important;
+    word-break:  break-all;           /* break long numbers if absolutely needed */
+    line-height: 1.1;
 }
 [data-testid="stMetricLabel"] {
     color: var(--lo) !important;
@@ -453,6 +461,48 @@ html, body,
 }
 [data-testid="stMetricDelta"] {
     font-size: clamp(0.75rem, 1.6vw, 0.95rem) !important;
+}
+
+/* ── 5b. Responsive metric grid ──────────────────────────────────────────── */
+/*
+ * The metric row uses a CSS Grid div (not st.columns) to get true
+ * viewport-responsive behaviour:
+ *
+ *   ≥ 800px  →  [Price] [RSI] [Vol] [Signal]   (4 across)
+ *   < 800px  →  [Price         ]                (full width, row 1)
+ *              [RSI  ] [Vol  ]                  (2 across, row 2)
+ *              [Signal         ]                (full width, row 3)
+ *
+ * The Price card is full-width on tablet/mobile so $1,234,567.89
+ * can never be truncated.
+ */
+.av-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: clamp(6px, 1.5vw, 14px);
+    margin-bottom: 12px;
+    width: 100%;
+}
+.av-metric-price  { grid-column: span 1; }
+.av-metric-rsi    { grid-column: span 1; }
+.av-metric-vol    { grid-column: span 1; }
+.av-metric-signal { grid-column: span 1; }
+
+@media (max-width: 800px) {
+    .av-metric-grid {
+        grid-template-columns: 1fr 1fr;  /* 2-column base on tablet */
+    }
+    .av-metric-price  { grid-column: span 2; }  /* full width */
+    .av-metric-rsi    { grid-column: span 1; }
+    .av-metric-vol    { grid-column: span 1; }
+    .av-metric-signal { grid-column: span 2; }  /* full width */
+}
+@media (max-width: 480px) {
+    .av-metric-grid   { grid-template-columns: 1fr; }
+    .av-metric-price  { grid-column: span 1; }
+    .av-metric-rsi    { grid-column: span 1; }
+    .av-metric-vol    { grid-column: span 1; }
+    .av-metric-signal { grid-column: span 1; }
 }
 
 /* ── 6. Tabs ─────────────────────────────────────────────────────────────── */
@@ -947,40 +997,67 @@ def render_header(sel: str) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Metric cards  (4 columns; wrap to 2 × 2 on ≤ 640 px via Streamlit columns)
+# Metric cards  — CSS Grid layout, responsive at 800px breakpoint
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# Why CSS Grid instead of st.columns(4)?
+# st.columns() outputs fixed-width server-side divs that cannot reflow
+# based on the browser's current viewport width.  On a 768px iPad mini
+# with 4 columns each column is ~180px.  "$4,..." is what you get when
+# a 56px font value "$42,530.00" is wider than 180px and the container
+# clips it with overflow:hidden / text-overflow:ellipsis.
+#
+# The CSS Grid wrapper (.av-metric-grid) reacts to the real viewport:
+#   ≥ 800px  →  4 columns  (Price / RSI / Vol / Signal)
+#   < 800px  →  Price full-width row 1, RSI+Vol row 2, Signal full-width row 3
+#   < 480px  →  single column stack
+#
+# st.metric() is still used — we just wrap each one in a named div.
 
 def render_metrics(sig: EntrySignal) -> None:
     st.markdown('<div class="av-head">Live Metrics</div>', unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
 
-    with c1:
-        st.metric("Price", f"${sig.price:,.2f}")
+    # ── Open the responsive CSS Grid wrapper ─────────────────────────────────
+    st.markdown('<div class="av-metric-grid">', unsafe_allow_html=True)
 
-    with c2:
-        rsi_note = (
-            "Overbought ⚠️" if sig.rsi > 70
-            else "Oversold 🟢" if sig.rsi < 30
-            else "Healthy ✓"
-        )
-        st.metric("RSI (14)", f"{sig.rsi:.1f}", delta=rsi_note)
+    # ── Price — full-width on tablet (span 2 of 2-col grid) ─────────────────
+    st.markdown('<div class="av-metric-price">', unsafe_allow_html=True)
+    st.metric("Price", f"${sig.price:,.2f}")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    with c3:
-        vol_note = "Heavy 🔥" if sig.volume_ratio >= 1.5 else "Normal"
-        st.metric("Vol Ratio", f"{sig.volume_ratio:.2f}x", delta=vol_note)
+    # ── RSI (14) — left of pair on tablet ────────────────────────────────────
+    st.markdown('<div class="av-metric-rsi">', unsafe_allow_html=True)
+    rsi_note = (
+        "Overbought ⚠️" if sig.rsi > 70
+        else "Oversold 🟢" if sig.rsi < 30
+        else "Healthy ✓"
+    )
+    st.metric("RSI (14)", f"{sig.rsi:.1f}", delta=rsi_note)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    with c4:
-        pill_cls = "pill-" + sig.signal.replace("_", "-")
-        sig_label = sig.signal.replace("_", " ").title()
-        st.markdown(
-            f'<div class="sig-card">'
-            f'<div class="sig-card-label">Signal</div>'
-            f'<span class="pill {pill_cls}" '
-            f'style="font-size:clamp(0.72rem,1.8vw,0.84rem);padding:5px 14px;">'
-            f"{sig_label}</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+    # ── Vol Ratio — right of pair on tablet ──────────────────────────────────
+    st.markdown('<div class="av-metric-vol">', unsafe_allow_html=True)
+    vol_note = "Heavy 🔥" if sig.volume_ratio >= 1.5 else "Normal"
+    st.metric("Vol Ratio", f"{sig.volume_ratio:.2f}x", delta=vol_note)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Signal pill — full-width on tablet ───────────────────────────────────
+    st.markdown('<div class="av-metric-signal">', unsafe_allow_html=True)
+    pill_cls  = "pill-" + sig.signal.replace("_", "-")
+    sig_label = sig.signal.replace("_", " ").title()
+    st.markdown(
+        f'<div class="sig-card">'
+        f'<div class="sig-card-label">Signal</div>'
+        f'<span class="pill {pill_cls}" '
+        f'style="font-size:clamp(0.72rem,1.8vw,0.84rem);padding:5px 14px;">'
+        f"{sig_label}</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Close the grid wrapper ────────────────────────────────────────────────
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
