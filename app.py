@@ -152,4 +152,39 @@ def main():
         st.markdown("### PRICE ACTION")
         df_chart = fetch_ohlcv(ticker_choice)
         if not df_chart.empty:
-            fig = go.Figure(data=[go.
+            fig = go.Figure(data=[go.Candlestick(x=df_chart.index, open=df_chart['Open'], high=df_chart['High'], low=df_chart['Low'], close=df_chart['Close'])])
+            fig.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=450, margin=dict(l=0,r=0,t=0,b=0))
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Entry Zone Detail
+        st.markdown(f"""
+        <div class="entry-box">
+            <small style='color:#ffffff;'>ENTRY ZONE</small>
+            <h2 style='margin:0; color:#FFD700;'>${sig.price * 0.98:,.2f} – ${sig.price * 1.02:,.2f}</h2>
+            <div style='display:flex; justify-content:space-between; margin-top:15px;'>
+                <div><small style='color:#ffffff;'>STOP LOSS</small><br><b style='color:#ef4444;'>${sig.price * 0.92:,.2f}</b></div>
+                <div><small style='color:#ffffff;'>RISK/REWARD</small><br><b style='color:#22c55e;'>1 : 2.0</b></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_astro:
+        st.markdown("### URANIAN INSIGHTS")
+        for hit in report.active_hits:
+            st.markdown(f"""
+            <div class="astro-panel">
+                <div style="color:#FFD700; font-weight:bold;">⚡ {hit.formula}</div>
+                <div style="font-size:0.9rem; color:#ffffff; line-height:1.5; margin-top:5px;">{hit.interpretation}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # 3. SCREENER TABLE
+    st.markdown(f"### SCREENER — {selected_class}")
+    df_screen = pd.DataFrame([{
+        "TICKER": s.ticker, "PRICE": f"${s.price:,.2f}", "RSI": f"{s.rsi:.1f}", 
+        "VOL RATIO": f"{s.volume_ratio:.2f}x", "SIGNAL": s.signal.upper()
+    } for s in signals])
+    st.table(df_screen)
+
+if __name__ == "__main__":
+    main()
