@@ -180,31 +180,59 @@ html, body,
     padding-left: max(0.5rem, 1vw) !important;
     padding-right: max(0.5rem, 1vw) !important;
 }
-/* ── stHeader: keep the container VISIBLE so the sidebar toggle survives ── */
-/* Hiding [data-testid="stHeader"] also hides collapsedControl (the > button) */
-/* which lives inside it in Streamlit ≥ 1.28 — that is exactly the iPad bug. */
-/* Instead we hide only the specific children we don't want.                  */
-[data-testid="stDecoration"]  { display: none !important; }
-[data-testid="stToolbar"]     { display: none !important; }
-#MainMenu                     { display: none !important; }
-footer                        { display: none !important; }
+/* ── stHeader: keep visible, style it dark so the toggle is legible ─────── */
+/* NEVER set display:none on stHeader — collapsedControl lives inside it.     */
+[data-testid="stHeader"] {
+    background: #16181c !important;
+    border-bottom: 1px solid #2d3148 !important;
+}
+[data-testid="stDecoration"] { display: none !important; }
+[data-testid="stToolbar"]    { display: none !important; }
+#MainMenu                    { display: none !important; }
+footer                       { display: none !important; }
 
-/* Explicitly keep the collapse/expand toggle always visible and above everything */
+/* ── Sidebar toggle — explicit gold-on-dark, highest z-index ────────────── */
+/* This targets the > button whether the sidebar is open or collapsed.        */
 [data-testid="collapsedControl"] {
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    z-index: 999999 !important;
+    display:          flex        !important;
+    visibility:       visible     !important;
+    opacity:          1           !important;
+    pointer-events:   auto        !important;
+    z-index:          999999      !important;
+    background:       #1e2028     !important;  /* card-dark so it contrasts    */
+    border-radius:    0 8px 8px 0 !important;
+    border:           1px solid #FFD700 !important;
+    border-left:      none        !important;
+    padding:          6px 4px     !important;
+}
+/* Make the chevron icon gold so it's visible on the dark header */
+[data-testid="collapsedControl"] svg {
+    fill:   #FFD700 !important;
+    color:  #FFD700 !important;
+    stroke: #FFD700 !important;
+}
+[data-testid="collapsedControl"] button {
+    background:     transparent !important;
+    color:          #FFD700     !important;
+    border:         none        !important;
+    outline:        none        !important;
+    pointer-events: auto        !important;
 }
 
 /* ── 3. Sidebar ──────────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
     background: var(--bg-sidebar) !important;
-    border-right: 1px solid var(--border);
+    border-right: 1px solid var(--border) !important;
     padding: 0 0.5rem;
+    z-index: 100 !important;        /* below toggle so toggle stays on top     */
 }
-[data-testid="stSidebar"] * { color: var(--hi) !important; }
+/* Scope the colour override to sidebar content only — do NOT use bare *      */
+/* A bare `[data-testid="stSidebar"] *` bleeds into collapsedControl's SVG.  */
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] div,
+[data-testid="stSidebar"] li,
+[data-testid="stSidebar"] a { color: var(--hi) !important; }
 [data-testid="stSidebar"] .stSelectbox > div > div {
     background: var(--bg-card) !important;
     border: 1px solid var(--border) !important;
