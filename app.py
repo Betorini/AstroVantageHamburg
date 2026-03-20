@@ -255,7 +255,7 @@ st.set_page_config(
     page_title="AstroVantage",
     page_icon="🔭",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -437,21 +437,28 @@ html, body,
 [data-testid="stMetricValue"] {
     color: var(--gold) !important;
     /*
-     * RESPONSIVE PRICE FIX:
-     * clamp(1.8rem, 6vw, 3.5rem)
-     *   • 1.8rem floor  — minimum on very small phones
-     *   • 6vw  middle   — scales with viewport; on a 768px iPad = 46px
+     * RESPONSIVE PRICE — NO TRUNCATION:
+     * clamp(2.2rem, 7vw, 3.5rem)
+     *   • 2.2rem floor  — minimum on narrow phones (~35px)
+     *   • 7vw   middle  — scales with viewport width; 768px iPad = 54px
      *   • 3.5rem ceiling — ~56px on large desktops
-     * white-space: normal + overflow: visible ensure the price string
-     * NEVER gets clipped to "$4,..." regardless of column width.
+     *
+     * white-space: normal  → value wraps to next line instead of being clipped
+     * overflow: visible    → container never hides the value
+     * text-overflow: unset → no ellipsis ("$4,...") ever
+     * word-break: break-all → absolute last resort for extreme values
+     *
+     * The metric sits inside .av-metric-price which is full-width on
+     * screens ≤ 800px, so a 54px "$42,530.00" string (~330px wide) has
+     * the full viewport width available — zero truncation possible.
      */
-    font-size:   clamp(1.8rem, 6vw, 3.5rem) !important;
-    font-weight: 800 !important;
-    white-space: normal !important;   /* allow wrap rather than truncate */
-    overflow:    visible !important;
+    font-size:     clamp(2.2rem, 7vw, 3.5rem) !important;
+    font-weight:   800 !important;
+    white-space:   normal !important;
+    overflow:      visible !important;
     text-overflow: unset !important;
-    word-break:  break-all;           /* break long numbers if absolutely needed */
-    line-height: 1.1;
+    word-break:    break-all;
+    line-height:   1.1;
 }
 [data-testid="stMetricLabel"] {
     color: var(--lo) !important;
