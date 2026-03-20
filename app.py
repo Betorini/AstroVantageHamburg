@@ -180,8 +180,14 @@ html, body,
     padding-left: max(0.5rem, 1vw) !important;
     padding-right: max(0.5rem, 1vw) !important;
 }
-/* ── stHeader: keep visible, style it dark so the toggle is legible ─────── */
-/* NEVER set display:none on stHeader — collapsedControl lives inside it.     */
+/* When the sidebar is collapsed the toggle floats at ~60px from the left.   */
+/* Give the main block a minimum left indent so content never hides under it.*/
+[data-testid="stMainBlockContainer"] {
+    padding-left:  max(3.5rem, 3vw) !important;
+    padding-right: max(1rem,   2vw) !important;
+}
+/* ── stHeader: keep visible, style it dark so the toggle is always legible ── */
+/* NEVER set display:none on stHeader — collapsedControl lives inside it.      */
 [data-testid="stHeader"] {
     background: #16181c !important;
     border-bottom: 1px solid #2d3148 !important;
@@ -191,32 +197,54 @@ html, body,
 #MainMenu                    { display: none !important; }
 footer                       { display: none !important; }
 
-/* ── Sidebar toggle — explicit gold-on-dark, highest z-index ────────────── */
-/* This targets the > button whether the sidebar is open or collapsed.        */
+/* ── Sidebar toggle wrapper ──────────────────────────────────────────────── */
+/* collapsedControl is the outer container; it must be visible on all screens */
 [data-testid="collapsedControl"] {
-    display:          flex        !important;
-    visibility:       visible     !important;
-    opacity:          1           !important;
-    pointer-events:   auto        !important;
-    z-index:          999999      !important;
-    background:       #1e2028     !important;  /* card-dark so it contrasts    */
-    border-radius:    0 8px 8px 0 !important;
-    border:           1px solid #FFD700 !important;
-    border-left:      none        !important;
-    padding:          6px 4px     !important;
+    display:        flex   !important;
+    visibility:     visible !important;
+    opacity:        1       !important;
+    pointer-events: auto    !important;
+    z-index:        999999  !important;
 }
-/* Make the chevron icon gold so it's visible on the dark header */
-[data-testid="collapsedControl"] svg {
+
+/* ── button[kind="header"] — the actual toggle button Streamlit renders ───── */
+/* On desktop Streamlit renders this as button[kind="header"] INSIDE             */
+/* collapsedControl. Without explicit styling it either inherits the wide gold   */
+/* gradient from .stButton > button (broken look) or is transparent on the dark */
+/* header background (invisible). Style it as a circular gold-tinted button.    */
+button[kind="header"] {
+    background-color: rgba(255, 215, 0, 0.15) !important;
+    color:            #FFD700                  !important;
+    border:           1px solid rgba(255, 215, 0, 0.4) !important;
+    border-radius:    50%                      !important;
+    width:            36px                     !important;
+    height:           36px                     !important;
+    min-width:        36px                     !important;
+    max-width:        36px                     !important;
+    padding:          0                        !important;
+    margin-top:       10px                     !important;
+    margin-left:      12px                     !important;
+    display:          flex                     !important;
+    align-items:      center                   !important;
+    justify-content:  center                   !important;
+    visibility:       visible                  !important;
+    opacity:          1                        !important;
+    z-index:          999999                   !important;
+    pointer-events:   auto                     !important;
+    /* Override any width:100% from the global .stButton rule */
+    flex-shrink:      0                        !important;
+}
+button[kind="header"]:hover {
+    background-color: rgba(255, 215, 0, 0.35) !important;
+    border-color:     #FFD700                  !important;
+}
+/* Gold chevron SVG inside the toggle */
+button[kind="header"] svg {
     fill:   #FFD700 !important;
-    color:  #FFD700 !important;
     stroke: #FFD700 !important;
-}
-[data-testid="collapsedControl"] button {
-    background:     transparent !important;
-    color:          #FFD700     !important;
-    border:         none        !important;
-    outline:        none        !important;
-    pointer-events: auto        !important;
+    color:  #FFD700 !important;
+    width:  18px    !important;
+    height: 18px    !important;
 }
 
 /* ── 3. Sidebar ──────────────────────────────────────────────────────────── */
@@ -247,20 +275,21 @@ footer                       { display: none !important; }
     text-transform: uppercase !important;
 }
 
-/* ── 4. Buttons ──────────────────────────────────────────────────────────── */
-.stButton > button {
+/* ── 4. Buttons — guard toggle from inheriting the app button styles ─────── */
+/* Without :not([kind="header"]) the toggle gets width:100% and the gradient, */
+/* which makes it appear as a wide gold bar and breaks the circular shape.    */
+.stButton > button:not([kind="header"]) {
     background: linear-gradient(135deg, #7c5c00, #FFD700) !important;
     color: #16181c !important;
     border: none !important;
     border-radius: 8px !important;
     font-weight: 800 !important;
-    /* clamp: shrinks on small screens */
     font-size: clamp(0.72rem, 2vw, 0.88rem) !important;
     padding: 0.6rem 1.2rem !important;
     transition: opacity 0.15s;
     width: 100%;
 }
-.stButton > button:hover { opacity: 0.82; }
+.stButton > button:not([kind="header"]):hover { opacity: 0.82; }
 
 /* ── 5. Metric cards ─────────────────────────────────────────────────────── */
 [data-testid="metric-container"] {
